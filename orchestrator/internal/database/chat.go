@@ -13,6 +13,15 @@ import (
 
 const chatThreadInactivityThreshold = 2 * time.Hour
 
+const (
+	// DefaultChatMessagePageLimit is the default page size for ListChatMessages when limit <= 0.
+	DefaultChatMessagePageLimit = 50
+	// MaxChatMessagePageLimit is the maximum page size for ListChatMessages.
+	MaxChatMessagePageLimit    = 100
+	defaultChatThreadPageLimit = 20
+	maxChatThreadPageLimit     = 100
+)
+
 // GetOrCreateActiveChatThread returns the most recent chat thread for (userID, projectID) if updated within 2h; otherwise creates a new thread.
 // See docs/tech_specs/openai_compatible_chat_api.md and chat_threads_and_messages.md.
 func (db *DB) GetOrCreateActiveChatThread(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID) (*models.ChatThread, error) {
@@ -91,22 +100,37 @@ func (db *DB) AppendChatMessage(ctx context.Context, threadID uuid.UUID, role, c
 	return record.ToChatMessage(), nil
 }
 
-// ListChatMessages returns up to limit messages for threadID ordered oldest-first.
-// A limit of 0 returns all messages.
-func (db *DB) ListChatMessages(ctx context.Context, threadID uuid.UUID, limit int) ([]*models.ChatMessage, error) {
-	q := db.db.WithContext(ctx).Model(&ChatMessageRecord{}).Where("thread_id = ?", threadID).Order("created_at ASC")
-	if limit > 0 {
-		q = q.Limit(limit)
+// ListChatMessages returns one page of messages for threadID ordered oldest-first and the total message count.
+// limit<=0 uses DefaultChatMessagePageLimit; limit is clamped to MaxChatMessagePageLimit.
+func (db *DB) ListChatMessages(ctx context.Context, threadID uuid.UUID, limit, offset int) ([]*models.ChatMessage, int64, error) {
+	var total int64
+	if err := db.db.WithContext(ctx).Model(&ChatMessageRecord{}).Where("thread_id = ?", threadID).Count(&total).Error; err != nil {
+		return nil, 0, wrapErr(err, "count chat messages")
+	}
+	if limit <= 0 {
+		limit = DefaultChatMessagePageLimit
+	}
+	if limit > MaxChatMessagePageLimit {
+		limit = MaxChatMessagePageLimit
+	}
+	if offset < 0 {
+		offset = 0
 	}
 	var records []ChatMessageRecord
-	if err := q.Find(&records).Error; err != nil {
-		return nil, wrapErr(err, "list chat messages")
+	err := db.db.WithContext(ctx).Model(&ChatMessageRecord{}).
+		Where("thread_id = ?", threadID).
+		Order("created_at ASC").
+		Limit(limit).
+		Offset(offset).
+		Find(&records).Error
+	if err != nil {
+		return nil, 0, wrapErr(err, "list chat messages")
 	}
 	msgs := make([]*models.ChatMessage, len(records))
 	for i := range records {
 		msgs[i] = records[i].ToChatMessage()
 	}
-	return msgs, nil
+	return msgs, total, nil
 }
 
 // CreateChatAuditLog writes a chat completion audit record.
@@ -149,17 +173,22 @@ func (db *DB) GetThreadByResponseID(ctx context.Context, responseID string, user
 }
 
 // ListChatThreads returns threads for the user ordered by updated_at DESC. Optional projectID filter (when set, only that project).
+// limit<=0 uses defaultChatThreadPageLimit; limit is clamped to maxChatThreadPageLimit.
 func (db *DB) ListChatThreads(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID, limit, offset int) ([]*models.ChatThread, error) {
+	if limit <= 0 {
+		limit = defaultChatThreadPageLimit
+	}
+	if limit > maxChatThreadPageLimit {
+		limit = maxChatThreadPageLimit
+	}
+	if offset < 0 {
+		offset = 0
+	}
 	q := db.db.WithContext(ctx).Model(&ChatThreadRecord{}).Where("user_id = ?", userID).Order("updated_at DESC")
 	if projectID != nil {
 		q = q.Where("project_id = ?", *projectID)
 	}
-	if limit > 0 {
-		q = q.Limit(limit)
-	}
-	if offset > 0 {
-		q = q.Offset(offset)
-	}
+	q = q.Limit(limit).Offset(offset)
 	var records []ChatThreadRecord
 	if err := q.Find(&records).Error; err != nil {
 		return nil, wrapErr(err, "list chat threads")

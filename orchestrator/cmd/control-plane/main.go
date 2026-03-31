@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -294,8 +295,8 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	return shutdownHTTPServer(ctx, server, logger)
 }
 
-// testPMAPollInterval, when set by tests, shortens the poll interval in startPMAWhenInferencePathReady.
-var testPMAPollInterval time.Duration
+// testPMAPollIntervalNs holds test override for poll interval (nanoseconds); 0 means default 2s. Atomic for -race with async PMA startup.
+var testPMAPollIntervalNs atomic.Int64
 
 // inferencePathAvailable returns true when at least one inference path exists: dispatchable node or external API credential (REQ-ORCHES-0150, orchestrator_bootstrap.md).
 // waitForInferencePath polls until at least one inference path is available (node or external key) or ctx is done.
@@ -337,8 +338,8 @@ func pollInferencePathUntilReady(ctx context.Context, store database.Store, logg
 
 func waitForInferencePath(ctx context.Context, store database.Store, logger *slog.Logger) bool {
 	pollInterval := 2 * time.Second
-	if testPMAPollInterval > 0 {
-		pollInterval = testPMAPollInterval
+	if ns := testPMAPollIntervalNs.Load(); ns > 0 {
+		pollInterval = time.Duration(ns)
 	}
 	return pollInferencePathUntilReady(ctx, store, logger, pollInterval)
 }

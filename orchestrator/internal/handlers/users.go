@@ -13,12 +13,12 @@ import (
 
 // UserHandler handles user endpoints.
 type UserHandler struct {
-	db     database.Store
+	db     database.UserStore
 	logger *slog.Logger
 }
 
 // NewUserHandler creates a new user handler.
-func NewUserHandler(db database.Store, logger *slog.Logger) *UserHandler {
+func NewUserHandler(db database.UserStore, logger *slog.Logger) *UserHandler {
 	return &UserHandler{
 		db:     db,
 		logger: logger,

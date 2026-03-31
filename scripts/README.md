@@ -156,6 +156,11 @@ See `just setup-dev help` for the full list.
 - **Variable:** `INFERENCE_PROXY_IMAGE`, `OLLAMA_UPSTREAM_URL`
   - default: (dev defaults)
   - description: Used by E2E and node inference.
+- **Script:** `scripts/e2e_stack_env.sh`
+  - description: Sourced by `just setup-dev full-demo` and `just setup-dev test-e2e` before `run_e2e.py`.
+    Exports dev defaults for `WORKFLOW_RUNNER_BEARER_TOKEN`, `WORKER_INTERNAL_AGENT_TOKEN`, `MCP_SANDBOX_AGENT_BEARER_TOKEN`, `MCP_PA_AGENT_BEARER_TOKEN`, and leaves `E2E_SKIP_INFERENCE_SMOKE` unset unless you set it.
+    `full-demo` then clears `E2E_SKIP_INFERENCE_SMOKE` so inference tests run.
+    Matches non-empty defaults in `orchestrator/docker-compose.yml` for the control-plane.
 
 **Logs and state:** Node-manager PID file: `$TMPDIR/cynodeai-node-manager.pid`.
 Worker-api state: `$TMPDIR/cynodeai-node-state`.

@@ -84,6 +84,7 @@ just e2e --tags suite_proxy_pma
   Pass options: `just e2e --no-build`, `just e2e -v`, etc.
 - `just setup-dev test-e2e` - run the suite via scripts/justfile (same as above, ensures PYTHONPATH).
 - `just setup-dev full-demo` - start stack and node, then run only tests tagged `full_demo` (excludes subset-only tests such as proxy+PMA functional tests that start their own services); use `--stop-on-success` to tear down after pass.
+  Loads `scripts/e2e_stack_env.sh` and clears `E2E_SKIP_INFERENCE_SMOKE` so MCP/workflow token checks and inference smoke run (no env-based skips for those).
   - For E2E that expects OLLAMA in compose, use `just setup-dev full-demo --ollama-in-stack`.
     **AI agents must NOT use** this; node-manager must start Ollama for GPU variant validation.
 
@@ -116,7 +117,7 @@ Gaps (e.g. 0011-0019 between 0010 and 0020) allow inserting new tests without re
 - **e2e_0380_control_plane_node_register** - POST `/v1/nodes/register`; sets `state.NODE_JWT`.
 - **e2e_0390_control_plane_capability** - POST `/v1/nodes/capability` with node JWT.
 - **e2e_0420_task_create** - Task create acceptance coverage for prompt mode plus canonical `--name` and `--attach`; sets `state.TASK_ID`.
-- **e2e_0425_task_planning_state** - `planning_state=draft` on create; workflow start blocked until `task ready`; requires `WORKFLOW_RUNNER_BEARER_TOKEN` for the workflow gate case.
+- **e2e_0425_task_planning_state** - `planning_state=draft` on create; workflow start blocked until `task ready`; workflow gate case needs `WORKFLOW_RUNNER_BEARER_TOKEN` (set by `scripts/e2e_stack_env.sh` / compose defaults when using full-demo).
 - **e2e_0430_task_list** - Task list JSON; asserts tasks array and created task present.
 - **e2e_0440_task_get** - Get task by ID.
 - **e2e_0450_task_result** - Get task result; asserts status present.

@@ -331,13 +331,12 @@ func (h *OpenAIChatHandler) ListThreadMessages(w http.ResponseWriter, r *http.Re
 		writeOpenAIError(w, http.StatusInternalServerError, "internal_error", "Failed to get thread")
 		return
 	}
-	limit := 50
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if n, parseErr := strconv.Atoi(l); parseErr == nil && n > 0 && n <= 100 {
-			limit = n
-		}
+	limit, offset, ok := parseLimitOffsetQuery(r, database.DefaultChatMessagePageLimit, database.MaxChatMessagePageLimit)
+	if !ok {
+		writeOpenAIError(w, http.StatusBadRequest, "invalid_request", "Invalid limit or offset")
+		return
 	}
-	msgs, err := h.db.ListChatMessages(ctx, id, limit)
+	msgs, total, err := h.db.ListChatMessages(ctx, id, limit, offset)
 	if err != nil {
 		h.logger.Error("list chat messages", "error", err)
 		writeOpenAIError(w, http.StatusInternalServerError, "internal_error", "Failed to list messages")
@@ -353,7 +352,16 @@ func (h *OpenAIChatHandler) ListThreadMessages(w http.ResponseWriter, r *http.Re
 			"created_at": m.CreatedAt.Format(time.RFC3339),
 		})
 	}
-	writeOpenAIJSON(w, http.StatusOK, map[string]interface{}{"data": items})
+	out := map[string]interface{}{
+		"data":        items,
+		"total_count": total,
+	}
+	if int64(offset)+int64(len(msgs)) < total && len(msgs) > 0 {
+		next := offset + len(msgs)
+		out["next_offset"] = next
+		out["next_cursor"] = strconv.Itoa(next)
+	}
+	writeOpenAIJSON(w, http.StatusOK, out)
 }
 
 // PatchThreadTitle handles PATCH /v1/chat/threads/{id} (rename: update title).

@@ -39,7 +39,7 @@ const (
 
 // NodeHandler handles node registration and management endpoints.
 type NodeHandler struct {
-	db                       database.Store
+	db                       database.NodeStore
 	jwt                      *auth.JWTManager
 	registrationPSK          string
 	orchestratorPublicURL    string
@@ -50,7 +50,7 @@ type NodeHandler struct {
 }
 
 // NewNodeHandler creates a new node handler.
-func NewNodeHandler(db database.Store, jwt *auth.JWTManager, registrationPSK, orchestratorPublicURL, workerAPIBearerToken, workerAPITargetURL, workerInternalAgentToken string, logger *slog.Logger) *NodeHandler {
+func NewNodeHandler(db database.NodeStore, jwt *auth.JWTManager, registrationPSK, orchestratorPublicURL, workerAPIBearerToken, workerAPITargetURL, workerInternalAgentToken string, logger *slog.Logger) *NodeHandler {
 	return &NodeHandler{
 		db:                       db,
 		jwt:                      jwt,

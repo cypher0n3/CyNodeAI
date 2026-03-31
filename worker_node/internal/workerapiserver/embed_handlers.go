@@ -700,9 +700,8 @@ func embedJobsRunHandler(runner embedRunner, workspaceRoot, bearerToken string) 
 			embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "Invalid request body")
 			return
 		}
-		if req.Version != 1 || req.TaskID == "" || req.JobID == "" ||
-			(req.Sandbox.JobSpecJSON == "" && len(req.Sandbox.Command) == 0) {
-			embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "validation failed")
+		if err := workerapi.ValidateRequest(&req); err != nil {
+			embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", err.Error())
 			return
 		}
 		resp, err := runner.RunJob(r.Context(), &req, workspaceRoot)

@@ -18,14 +18,14 @@ import (
 
 // AuthHandler handles authentication endpoints.
 type AuthHandler struct {
-	db          database.Store
+	db          database.UserStore
 	jwt         *auth.JWTManager
 	rateLimiter *auth.RateLimiter
 	logger      *slog.Logger
 }
 
 // NewAuthHandler creates a new auth handler.
-func NewAuthHandler(db database.Store, jwt *auth.JWTManager, rateLimiter *auth.RateLimiter, logger *slog.Logger) *AuthHandler {
+func NewAuthHandler(db database.UserStore, jwt *auth.JWTManager, rateLimiter *auth.RateLimiter, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
 		db:          db,
 		jwt:         jwt,

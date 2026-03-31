@@ -125,6 +125,35 @@ func TestTaskHandler_GetTaskResultSuccess(t *testing.T) {
 	}
 }
 
+func TestTaskHandler_InvalidPaginationQuery(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
+	userID := uuid.New()
+	prompt := testPrompt
+	task := newMockTask(&userID, models.TaskStatusCompleted, &prompt)
+	mockDB.AddTask(task)
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	cases := []struct {
+		name string
+		path string
+		fn   func(http.ResponseWriter, *http.Request)
+	}{
+		{"result_limit", "/v1/tasks/" + task.ID.String() + "/result?limit=0", handler.GetTaskResult},
+		{"logs_offset", "/v1/tasks/" + task.ID.String() + "/logs?offset=-1", handler.GetTaskLogs},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", c.path, http.NoBody).WithContext(ctx)
+			req.SetPathValue("id", task.ID.String())
+			rec := httptest.NewRecorder()
+			c.fn(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("want 400, got %d", rec.Code)
+			}
+		})
+	}
+}
+
 func TestTaskHandler_GetTaskResultNotFound(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	logger := newTestLogger()
@@ -876,104 +905,5 @@ func TestAuthHandler_RefreshUserNotFound(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("expected status 401, got %d", rec.Code)
-	}
-}
-
-//nolint:dupl // node registration body struct repeated across tests
-func TestNodeHandler_handleExistingNodeDBError(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	logger := newTestLogger()
-
-	node := &models.Node{
-		NodeBase: models.NodeBase{
-			NodeSlug: "test-node",
-			Status:   "offline",
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-
-	mockDB := testutil.NewMockDB()
-	mockDB.AddNode(node)
-	mockDB.ForceError = errors.New("db error on update")
-
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", logger)
-
-	body := nodepayloads.RegistrationRequest{
-		PSK: "test-psk",
-		Capability: nodepayloads.CapabilityReport{
-			Version: 1,
-			Node:    nodepayloads.CapabilityNode{NodeSlug: "test-node"},
-			Platform: nodepayloads.Platform{
-				OS:   "linux",
-				Arch: "amd64",
-			},
-			Compute: nodepayloads.Compute{
-				CPUCores: 4,
-				RAMMB:    8192,
-			},
-		},
-	}
-	jsonBody, _ := json.Marshal(body)
-	req := httptest.NewRequest("POST", "/v1/nodes/register", bytes.NewBuffer(jsonBody))
-	rec := httptest.NewRecorder()
-
-	handler.Register(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected status 500, got %d", rec.Code)
-	}
-}
-
-func TestTaskHandler_GetTaskResultJobsDBError(t *testing.T) {
-	logger := newTestLogger()
-	userID := uuid.New()
-	prompt := testPrompt
-	task := newMockTask(&userID, models.TaskStatusCompleted, &prompt)
-
-	// Create custom mock that returns error only on GetJobsByTaskID
-	mockDB := &errorOnJobsMockDB{
-		MockDB: testutil.NewMockDB(),
-	}
-	mockDB.AddTask(task)
-
-	handler := NewTaskHandler(mockDB, logger, "", "")
-
-	req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String()+"/result", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
-	req.SetPathValue("id", task.ID.String())
-	rec := httptest.NewRecorder()
-
-	handler.GetTaskResult(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected status 500, got %d", rec.Code)
-	}
-}
-
-// errorOnJobsMockDB wraps MockDB to return error only on GetJobsByTaskID
-type errorOnJobsMockDB struct {
-	*testutil.MockDB
-}
-
-func (m *errorOnJobsMockDB) GetJobsByTaskID(_ context.Context, _ uuid.UUID) ([]*models.Job, error) {
-	return nil, errors.New("jobs query error")
-}
-
-func TestTaskHandler_GetTaskForbidden(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	logger := newTestLogger()
-	handler := NewTaskHandler(mockDB, logger, "", "")
-	ownerID := uuid.New()
-	otherID := uuid.New()
-	prompt := testPrompt
-	task := newMockTask(&ownerID, models.TaskStatusPending, &prompt)
-	mockDB.AddTask(task)
-	req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String(), http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, otherID))
-	req.SetPathValue("id", task.ID.String())
-	rec := httptest.NewRecorder()
-	handler.GetTask(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("expected 403, got %d", rec.Code)
 	}
 }

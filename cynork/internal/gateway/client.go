@@ -24,6 +24,11 @@ const pathV1Responses = "/v1/responses"
 
 const defaultGatewayClientTimeout = 30 * time.Second
 
+// taskReadyHTTPTimeout bounds POST /v1/tasks/{id}/ready. The orchestrator may run synchronous
+// inference (Ollama generate, up to ~120s server-side) before responding; the default 30s
+// client timeout causes spurious failures under load (e.g. E2E after long runs).
+const taskReadyHTTPTimeout = 5 * time.Minute
+
 // StreamExtra carries optional callbacks for named CyNodeAI SSE extension events
 // (thinking_delta, tool_call, heartbeat, iteration_start). Nil fields are ignored.
 type StreamExtra struct {
@@ -901,11 +906,20 @@ func (c *Client) CreateTask(ctx context.Context, req *userapi.CreateTaskRequest)
 func (c *Client) PostTaskReady(ctx context.Context, taskID string) (*userapi.TaskResponse, error) {
 	var out userapi.TaskResponse
 	path := "/v1/tasks/" + url.PathEscape(taskID) + "/ready"
-	if err := c.doPostJSON(ctx, path, struct{}{}, http.StatusOK, &out); err != nil {
+	if err := c.doPostJSONWithHTTPClient(ctx, c.httpClientForTaskReady(), path, struct{}{}, http.StatusOK, &out); err != nil {
 		return nil, err
 	}
 	normalizeTaskResponse(&out)
 	return &out, nil
+}
+
+// httpClientForTaskReady returns a client with a long timeout; see taskReadyHTTPTimeout.
+func (c *Client) httpClientForTaskReady() *http.Client {
+	hc := &http.Client{Timeout: taskReadyHTTPTimeout}
+	if c.HTTPClient != nil && c.HTTPClient.Transport != nil {
+		hc.Transport = c.HTTPClient.Transport
+	}
+	return hc
 }
 
 // GetTaskResult calls GET /v1/tasks/{id}/result (requires auth).

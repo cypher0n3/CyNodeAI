@@ -538,6 +538,12 @@ bdd-ci:
     export GODOG_STRICT=1
     just test-bdd
 
+# Explain how BDD coverage relates to `just test-go-cover`. Godog suites run as separate `go test`
+# packages under each module's `_bdd/`; they do not merge into the unit-test coverage profiles.
+# For BDD-only numbers: `cd <module> && go test -coverprofile=/tmp/bdd.cov -coverpkg=./... ./_bdd`.
+test-coverage-bdd-vs-unit:
+    @printf '%s\n' "Unit tests (per-package thresholds): just test-go-cover" "BDD: just test-bdd — separate metric; optional BDD coverprofile example above."
+
 # Dev setup (scripts/justfile). Usage: just setup-dev <command> [ARGS]. Run just setup-dev help.
 setup-dev CMD *ARGS:
     @just scripts/{{ CMD }} {{ ARGS }}

@@ -25,14 +25,14 @@ import (
 
 // TaskHandler handles task endpoints.
 type TaskHandler struct {
-	db             database.Store
+	db             database.TaskStore
 	logger         *slog.Logger
 	inferenceURL   string
 	inferenceModel string
 }
 
 // NewTaskHandler creates a new task handler. inferenceURL and inferenceModel are optional; when set, prompt-mode tasks call the model directly so prompt→model MUST work.
-func NewTaskHandler(db database.Store, logger *slog.Logger, inferenceURL, inferenceModel string) *TaskHandler {
+func NewTaskHandler(db database.TaskStore, logger *slog.Logger, inferenceURL, inferenceModel string) *TaskHandler {
 	if inferenceModel == "" {
 		inferenceModel = "qwen3.5:0.8b"
 	}
@@ -366,7 +366,12 @@ func (h *TaskHandler) GetTaskResult(w http.ResponseWriter, r *http.Request) {
 	if task == nil {
 		return
 	}
-	resp, err := mcptaskbridge.TaskResultForUser(ctx, h.db, task.ID)
+	limit, offset, ok := parseLimitOffsetQuery(r, database.DefaultJobPageLimit, database.MaxJobPageLimit)
+	if !ok {
+		WriteBadRequest(w, "Invalid limit or offset")
+		return
+	}
+	resp, err := mcptaskbridge.TaskResultForUser(ctx, h.db, task.ID, limit, offset)
 	if err != nil {
 		h.logger.Error("task result", "error", err)
 		WriteInternalError(w, "Failed to get jobs")
@@ -468,7 +473,12 @@ func (h *TaskHandler) GetTaskLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	stream := r.URL.Query().Get("stream")
-	resp, err := mcptaskbridge.TaskLogsForUser(ctx, h.db, task.ID, stream)
+	limit, offset, ok := parseLimitOffsetQuery(r, database.DefaultJobPageLimit, database.MaxJobPageLimit)
+	if !ok {
+		WriteBadRequest(w, "Invalid limit or offset")
+		return
+	}
+	resp, err := mcptaskbridge.TaskLogsForUser(ctx, h.db, task.ID, stream, limit, offset)
 	if err != nil {
 		h.logger.Error("get jobs", "error", err)
 		WriteInternalError(w, "Failed to get task logs")

@@ -694,8 +694,8 @@ The issues span all modules and cover unbounded reads, missing context propagati
 
 - Requirements: [`docs/requirements/orches.md`](../requirements/orches.md), [`docs/requirements/worker.md`](../requirements/worker.md), [`docs/requirements/client.md`](../requirements/client.md), [`docs/requirements/sbagnt.md`](../requirements/sbagnt.md), [`docs/requirements/mcpgat.md`](../requirements/mcpgat.md)
 - Tech specs: [`docs/tech_specs/orchestrator.md`](../tech_specs/orchestrator.md), [`docs/tech_specs/worker_node.md`](../tech_specs/worker_node.md), [`docs/tech_specs/cynode_sba.md`](../tech_specs/cynode_sba.md), [`docs/tech_specs/cynork/cynork_tui.md`](../tech_specs/cynork/cynork_tui.md), [`docs/tech_specs/go_rest_api_standards.md`](../tech_specs/go_rest_api_standards.md)
-- Review reports: [`2026-03-29_review_report_1_orchestrator.md`](2026-03-29_review_report_1_orchestrator.md) through [`2026-03-29_review_report_6_testing.md`](2026-03-29_review_report_6_testing.md)
-- Consolidated summary: [`2026-03-29_review_consolidated_summary.md`](2026-03-29_review_consolidated_summary.md) sections 2.3, 2.5
+- Review reports: [`2026-03-29_review_report_1_orchestrator.md`](old/2026-03-29_review_report_1_orchestrator.md) through [`2026-03-29_review_report_6_testing.md`](old/2026-03-29_review_report_6_testing.md)
+- Consolidated summary: [`2026-03-29_review_consolidated_summary.md`](old/2026-03-29_review_consolidated_summary.md) sections 2.3, 2.5
 - Implementation: `orchestrator/`, `worker_node/`, `agents/`, `cynork/`, `go_shared_libs/`
 
 ## Constraints
@@ -719,7 +719,7 @@ A malicious or buggy peer can OOM any component.
 #### Task 1 Requirements and Specifications
 
 - [`docs/tech_specs/go_rest_api_standards.md`](../tech_specs/go_rest_api_standards.md) -- body size limits
-- [Consolidated summary section 2.3](2026-03-29_review_consolidated_summary.md#23-unbounded-reads)
+- [Consolidated summary section 2.3](old/2026-03-29_review_consolidated_summary.md#23-unbounded-reads)
 
 #### Discovery (Task 1) Steps
 
@@ -763,10 +763,10 @@ Multiple components perform network I/O or long-running operations without conte
 
 #### Task 2 Requirements and Specifications
 
-- [Review Report 2](2026-03-29_review_report_2_worker_node.md) -- worker node context gaps
-- [Review Report 3](2026-03-29_review_report_3_agents.md) -- SBA context gaps
-- [Review Report 4](2026-03-29_review_report_4_cynork.md) -- cynork context gaps
-- [Consolidated summary section 2.5](2026-03-29_review_consolidated_summary.md#25-missing-contextcontext-propagation)
+- [Review Report 2](old/2026-03-29_review_report_2_worker_node.md) -- worker node context gaps
+- [Review Report 3](old/2026-03-29_review_report_3_agents.md) -- SBA context gaps
+- [Review Report 4](old/2026-03-29_review_report_4_cynork.md) -- cynork context gaps
+- [Consolidated summary section 2.5](old/2026-03-29_review_consolidated_summary.md#25-missing-contextcontext-propagation)
 
 #### Discovery (Task 2) Steps
 
@@ -808,7 +808,7 @@ Retry loops in the orchestrator use `time.Sleep` which ignores context cancellat
 
 #### Task 3 Requirements and Specifications
 
-- [Review Report 1](2026-03-29_review_report_1_orchestrator.md) -- `openai_chat.go:702-704`
+- [Review Report 1](old/2026-03-29_review_report_1_orchestrator.md) -- `openai_chat.go:702-704`
 
 #### Discovery (Task 3) Steps
 
@@ -848,7 +848,7 @@ Synchronous network calls in `Update()` for `/thread new`, `/thread switch`, and
 #### Task 4 Requirements and Specifications
 
 - [`docs/tech_specs/cynork/cynork_tui.md`](../tech_specs/cynork/cynork_tui.md) -- Bubble Tea async pattern
-- [Review Report 4](2026-03-29_review_report_4_cynork.md) -- synchronous I/O in Update()
+- [Review Report 4](old/2026-03-29_review_report_4_cynork.md) -- synchronous I/O in Update()
 
 #### Discovery (Task 4) Steps
 
@@ -889,7 +889,7 @@ Workflow handlers in the orchestrator lack authentication middleware, allowing u
 
 #### Task 5 Requirements and Specifications
 
-- [Review Report 1](2026-03-29_review_report_1_orchestrator.md) -- `handlers/workflow.go:129-252`
+- [Review Report 1](old/2026-03-29_review_report_1_orchestrator.md) -- `handlers/workflow.go:129-252`
 - [`docs/tech_specs/orchestrator.md`](../tech_specs/orchestrator.md) -- API authentication
 
 #### Discovery (Task 5) Steps
@@ -930,7 +930,7 @@ The `worker_api_bearer_token` is stored in plaintext in the orchestrator databas
 
 #### Task 6 Requirements and Specifications
 
-- [Review Report 1](2026-03-29_review_report_1_orchestrator.md) -- `nodes.go:168-174`
+- [Review Report 1](old/2026-03-29_review_report_1_orchestrator.md) -- `nodes.go:168-174`
 - [`docs/tech_specs/orchestrator.md`](../tech_specs/orchestrator.md) -- node registration and security
 
 #### Discovery (Task 6) Steps
@@ -973,7 +973,7 @@ The internal orchestrator proxy in the worker node does not log proxied requests
 #### Task 7 Requirements and Specifications
 
 - [REQ-WORKER-0163](../requirements/worker.md#req-worker-0163) -- proxy audit logging
-- [Review Report 2](2026-03-29_review_report_2_worker_node.md) -- `internal_orchestrator_proxy.go:126-175`
+- [Review Report 2](old/2026-03-29_review_report_2_worker_node.md) -- `internal_orchestrator_proxy.go:126-175`
 
 #### Discovery (Task 7) Steps
 
@@ -1010,7 +1010,7 @@ SBA lifecycle HTTP calls (`NotifyInProgress`, `NotifyCompletion`) do not close r
 
 #### Task 8 Requirements and Specifications
 
-- [Review Report 3](2026-03-29_review_report_3_agents.md) -- `lifecycle.go:53`, `lifecycle.go:71`
+- [Review Report 3](old/2026-03-29_review_report_3_agents.md) -- `lifecycle.go:53`, `lifecycle.go:71`
 
 #### Discovery (Task 8) Steps
 
@@ -1049,7 +1049,7 @@ The cynork gateway client has no default HTTP timeout and exposes `Token`/`BaseU
 
 #### Task 9 Requirements and Specifications
 
-- [Review Report 4](2026-03-29_review_report_4_cynork.md) -- gateway client timeout and data race
+- [Review Report 4](old/2026-03-29_review_report_4_cynork.md) -- gateway client timeout and data race
 
 #### Discovery (Task 9) Steps
 
@@ -1092,8 +1092,8 @@ SBA result statuses and protocol version are hardcoded strings; dead code exists
 
 #### Task 10 Requirements and Specifications
 
-- [Review Report 3](2026-03-29_review_report_3_agents.md) -- `main.go:140` (hardcoded `ProtocolVersion`), `main.go:167-172` (dead code)
-- [Review Report 5](2026-03-29_review_report_5_shared_libs.md) -- status constant consolidation
+- [Review Report 3](old/2026-03-29_review_report_3_agents.md) -- `main.go:140` (hardcoded `ProtocolVersion`), `main.go:167-172` (dead code)
+- [Review Report 5](old/2026-03-29_review_report_5_shared_libs.md) -- status constant consolidation
 
 #### Discovery (Task 10) Steps
 
@@ -1135,7 +1135,7 @@ This task adds initial feature files for the four domains called out in the todo
 
 #### Task 11 Requirements and Specifications
 
-- [Review Report 6](2026-03-29_review_report_6_testing.md) -- BDD domain coverage gaps
+- [Review Report 6](old/2026-03-29_review_report_6_testing.md) -- BDD domain coverage gaps
 - [`docs/requirements/`](../requirements/) -- ACCESS, AGENTS, MCPGAT, MCPTOO domain requirements
 
 #### Discovery (Task 11) Steps
@@ -1176,7 +1176,7 @@ E2E tests exist but are not run in CI, making regressions invisible until manual
 
 #### Task 12 Requirements and Specifications
 
-- [Review Report 6](2026-03-29_review_report_6_testing.md) -- E2E not in CI
+- [Review Report 6](old/2026-03-29_review_report_6_testing.md) -- E2E not in CI
 - Existing CI workflow: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
 
 #### Discovery (Task 12) Steps

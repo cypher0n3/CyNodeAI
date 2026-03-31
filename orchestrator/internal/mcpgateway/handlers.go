@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/artifacts"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/mcptaskbridge"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/skillscan"
 )
@@ -725,7 +727,14 @@ func handleSkillsList(ctx context.Context, store database.Store, args map[string
 	}
 	scopeFilter := strArg(args, "scope")
 	ownerFilter := strArg(args, "owner")
-	skills, err := store.ListSkillsForUser(ctx, *userID, scopeFilter, ownerFilter)
+	limit, offset, _, _, errMsg := mcptaskbridge.ParseListLimitOffset(args)
+	if errMsg != "" {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = &auditErrInvalidArguments
+		return http.StatusBadRequest, []byte(`{"error":"` + errMsg + `"}`), auditRec
+	}
+	skills, total, err := store.ListSkillsForUser(ctx, *userID, scopeFilter, ownerFilter, limit, offset)
 	if err != nil {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
@@ -744,7 +753,12 @@ func handleSkillsList(ctx context.Context, store database.Store, args map[string
 			"updated_at": s.UpdatedAt,
 		})
 	}
-	out := map[string]interface{}{"skills": items}
+	out := map[string]interface{}{"skills": items, "total_count": total}
+	if int64(offset)+int64(len(skills)) < total && len(skills) > 0 {
+		next := offset + len(skills)
+		out["next_offset"] = next
+		out["next_cursor"] = strconv.Itoa(next)
+	}
 	b, _ := json.Marshal(out)
 	return http.StatusOK, b, auditRec
 }

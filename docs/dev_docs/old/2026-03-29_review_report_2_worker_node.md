@@ -202,7 +202,8 @@ Vulnerabilities organized by severity level.
 
 - **No `MaxBytesReader` on `validateManagedProxyRequest`** (`embed_handlers.go:297`).
 
-- **Sensitive data in env.** `applyWorkerProxyConfigEnv` serializes node config to `WORKER_NODE_CONFIG_JSON`, visible in `/proc/<pid>/environ`.
+- **Sensitive data in env.**
+  `applyWorkerProxyConfigEnv` serializes node config to `WORKER_NODE_CONFIG_JSON`, visible in `/proc/<pid>/environ`.
 
 ### 5.4 Low Severity
 

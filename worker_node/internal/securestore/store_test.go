@@ -25,6 +25,11 @@ func validMasterKeyB64() string {
 	return base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
 }
 
+func TestStore_Close_NilSafe(t *testing.T) {
+	var s *Store
+	s.Close()
+}
+
 func TestStoreClose(t *testing.T) {
 	t.Setenv(masterKeyEnvName, validMasterKeyB64())
 	store, _, err := Open(t.TempDir())
@@ -280,8 +285,8 @@ func TestPutGetAgentToken_PQPath(t *testing.T) {
 	if err := json.Unmarshal(raw, &env); err != nil {
 		t.Fatalf("decode envelope: %v", err)
 	}
-	if env.Version != envelopeVersionPQ || env.Algorithm != algorithmPQKEM {
-		t.Fatalf("expected v2 PQ envelope, got version=%d algorithm=%q", env.Version, env.Algorithm)
+	if env.Version != envelopeVersionPQHKDF || env.Algorithm != algorithmPQKEMHKDF {
+		t.Fatalf("expected v4 PQ+HKDF envelope, got version=%d algorithm=%q", env.Version, env.Algorithm)
 	}
 	record, err := store.GetAgentToken("pma-pq")
 	if err != nil {
@@ -332,8 +337,8 @@ func TestPutGetAgentToken_AEADOnlyFallback(t *testing.T) {
 	if err := json.Unmarshal(raw, &env); err != nil {
 		t.Fatalf("decode envelope: %v", err)
 	}
-	if env.Version != envelopeVersionAEAD || env.Algorithm != agentTokenEncryptionAlgorithm {
-		t.Fatalf("expected v1 AEAD envelope, got version=%d algorithm=%q", env.Version, env.Algorithm)
+	if env.Version != envelopeVersionAEADAAD || env.Algorithm != agentTokenEncryptionAlgorithm {
+		t.Fatalf("expected v3 AEAD+AAD envelope, got version=%d algorithm=%q", env.Version, env.Algorithm)
 	}
 	record, err := store.GetAgentToken("pma-aead")
 	if err != nil {
@@ -379,7 +384,7 @@ func TestGetAgentToken_ReadsV1Envelope(t *testing.T) {
 		t.Fatalf("Open failed: %v", err)
 	}
 	record := []byte(`{"service_id":"legacy","token":"legacy-tok","expires_at":"","written_at":"2026-03-06T00:00:00Z"}`)
-	ciphertext, nonce, err := encrypt(record, store.key)
+	ciphertext, nonce, err := encrypt(record, store.key, nil)
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
@@ -710,10 +715,10 @@ func TestListAgentTokenServiceIDs_IgnoresInvalidFiles(t *testing.T) {
 }
 
 func TestEncryptDecrypt_RejectsBadKey(t *testing.T) {
-	if _, _, err := encrypt([]byte("x"), []byte("short")); err == nil {
+	if _, _, err := encrypt([]byte("x"), []byte("short"), nil); err == nil {
 		t.Fatal("expected encrypt to fail with bad key")
 	}
-	if _, err := decrypt([]byte("x"), []byte("nonce"), []byte("short")); err == nil {
+	if _, err := decrypt([]byte("x"), []byte("nonce"), []byte("short"), nil); err == nil {
 		t.Fatal("expected decrypt to fail with bad key")
 	}
 }
@@ -782,7 +787,7 @@ func TestGetAgentToken_InvalidStoredExpiry(t *testing.T) {
 		t.Fatalf("Open failed: %v", err)
 	}
 	record := []byte(`{"service_id":"svc-a","token":"tok","expires_at":"invalid","written_at":"2026-03-06T00:00:00Z"}`)
-	ciphertext, nonce, err := encrypt(record, store.key)
+	ciphertext, nonce, err := encrypt(record, store.key, nil)
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
@@ -847,7 +852,7 @@ func TestEncrypt_NonceReaderFailure(t *testing.T) {
 	orig := cryptorand.Reader
 	cryptorand.Reader = failingReader{}
 	defer func() { cryptorand.Reader = orig }()
-	if _, _, err := encrypt([]byte("plaintext"), []byte("0123456789abcdef0123456789abcdef")); err == nil {
+	if _, _, err := encrypt([]byte("plaintext"), []byte("0123456789abcdef0123456789abcdef"), nil); err == nil {
 		t.Fatal("expected encrypt to fail when nonce read fails")
 	}
 }
@@ -861,7 +866,7 @@ func TestSanitizeServiceID_Empty(t *testing.T) {
 func TestDecrypt_PayloadFailure(t *testing.T) {
 	key := []byte("0123456789abcdef0123456789abcdef")
 	nonce := []byte("0123456789ab") // 12 bytes
-	if _, err := decrypt([]byte("bad-ciphertext"), nonce, key); err == nil {
+	if _, err := decrypt([]byte("bad-ciphertext"), nonce, key, nil); err == nil {
 		t.Fatal("expected decrypt payload failure")
 	}
 }

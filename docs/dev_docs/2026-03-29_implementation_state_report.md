@@ -38,7 +38,7 @@ It covers the full task inventory from the consolidated refactor plan (2026-03-2
 - [mvp.md](../mvp.md) -- MVP scope definition (Phase 0 through Phase 4 and deferred items).
 - [2026-03-24_consolidated_refactor_and_outstanding_work_plan.md](old/2026-03-24_consolidated_refactor_and_outstanding_work_plan.md) -- original consolidated plan covering Tasks 1-12 (Tasks 1-3 refactor, Tasks 4-12 outstanding work).
 - [2026-03-27_consolidated_refactor_and_outstanding_work_plan_remaining_tasks.md](old/2026-03-27_consolidated_refactor_and_outstanding_work_plan_remaining_tasks.md) -- remaining tasks plan covering Tasks 4-12.
-- Final closeout report (archived during documentation consolidation; narrative in [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+- Final closeout report (archived during documentation consolidation; narrative in [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 - [_bugs.md](_bugs.md) -- bug tracker.
 - Task completion reports for Tasks 1-11 (see listing below).
 - The live codebase on branch `mvp/phase-2` as of 2026-03-29.
@@ -54,7 +54,7 @@ Tasks 1-3 addressed refactor work from updated tech specs; Tasks 4-12 addressed 
 
 #### Task 1: Orchestrator Artifacts Storage (Refactor)
 
-- **Status:** ✅ Implementation complete; per-task completion reports archived (see [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+- **Status:** ✅ Implementation complete; per-task completion reports archived (see [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 - **Delivered:** S3 blob backend (MinIO), artifact CRUD REST API (five endpoints), RBAC with scope partitions (user/group/project/global), MCP gateway tools (`artifact.put`, `artifact.get`, `artifact.list`), cross-principal read grants, hash backfill and stale cleanup, `OrchestratorArtifactRecord` GORM model.
 - **Tests:** Go unit tests, BDD scenarios (`features/orchestrator/orchestrator_artifacts.feature`), Python E2E (`e2e_0850_artifacts_crud.py`).
 - **Open items in original plan YAML:** Several Testing/Closeout gate steps still show `pending` in the original plan's frontmatter YAML.
@@ -63,69 +63,69 @@ Tasks 1-3 addressed refactor work from updated tech specs; Tasks 4-12 addressed 
 
 #### Task 2: TUI Bug 3/4 and Spec Alignment (Refactor)
 
-- **Status:** ✅ Implementation complete; per-task completion reports archived (see [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+- **Status:** ✅ Implementation complete; per-task completion reports archived (see [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 - **Delivered:** Bug 3 fix (scrollback differentiates `[CYNRK_THREAD_READY]` from `[CYNRK_THREAD_SWITCHED]`), Bug 4 fix (slash/shell commands dispatch while streaming; only plain chat blocked during `Loading`), seven spec delta items incorporated into `cynork_tui.md` and related docs.
 - **Tests:** Go unit tests, BDD scenarios (`features/cynork/cynork_tui_bugfixes.feature`), PTY E2E assertions in `e2e_0750`.
 - **Note:** The original plan's YAML frontmatter shows all Task 2 steps as `pending`, but the completion report and commit `32bdf64` (fix cynork-tui thread-ready landmark and slash/shell while loading) confirm the work was executed.
 
 #### Task 3: E2E Test Alignment Follow-Ups (Refactor)
 
-- **Status:** ✅ Implementation complete; per-task completion reports archived (see [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+- **Status:** ✅ Implementation complete; per-task completion reports archived (see [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 - **Delivered:** `/copy` and `/copy all` PTY E2E tests, `Ctrl+Down` history navigation symmetry test, BDD scenarios for transcript extraction and history navigation (`cynork_tui_composer_copy.feature`), composer footnote aligned with `Alt+Enter` / `Ctrl+J`.
 - **Tests:** Go unit tests (`TestPlainTranscript_OnlySystemLines`), BDD (four new scenarios), Python E2E in `e2e_0760` and `e2e_0765`.
 - **Caveat from report:** Full `just test-go-cover` and `just e2e --tags tui_pty` were not awaited in the Task 3 session; subsequent tasks validated the full suite.
 
 ### Tasks 4-12 (Remaining Tasks Plan)
 
-All tasks in the remaining tasks plan are marked `[x]` (complete); per-task completion reports were archived during documentation consolidation (see [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+All tasks in the remaining tasks plan are marked `[x]` (complete); per-task completion reports were archived during documentation consolidation (see [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 
 <!-- no-empty-heading allow -->
 
 #### Task 4: MCP Gateway Tool Call E2E Alignment
 
-- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 - **Delivered:** Bug 5 closed (no gateway code change needed; regression tests added), `ensure_e2e_task` prereq hardened, `parse_json_loose` helper, BDD for skills scoped-ID validation.
 
 #### Task 5: PMA Streaming State Machine
 
-- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 - **Delivered:** Configurable streaming token FSM routing visible/thinking/tool_call, per-iteration and per-turn overwrite events, secure-buffer wrapping.
 
 #### Task 6: Gateway Relay, Persistence, and Heartbeat Fallback
 
-- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 - **Delivered:** Separate visible/thinking/tool accumulators, `/v1/responses` native format, structured assistant turn persistence with redaction, heartbeat SSE fallback, client disconnect cancellation, `emitContentAsSSE` removed.
 
 #### Task 7: PTY Harness and TUI Streaming UX
 
-- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 - **Delivered:** PTY harness extensions (cancel-retain-partial, reconnect, scrollback waits), TranscriptTurn/TranscriptPart state, one in-flight turn rendering, thinking/tool toggles, overwrite scopes, heartbeat display, bounded-backoff reconnect, secure-buffer for TUI.
 
 #### Task 8: BDD Step Implementation and E2E Streaming Matrix
 
-- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 - **Delivered:** Cynork BDD streaming simulation, mock SSE mux, BDD step wiring for streaming scenarios, full E2E matrix validated (150 tests, 8 skipped).
 
 #### Task 9: TUI Auth Recovery and In-Session Switches
 
-- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 - **Delivered:** Startup login overlay when token missing, in-session 401 recovery, credential redaction in scrollback/transcript, project/model in-session switching E2E.
 
 #### Task 10: Remaining MVP Phase 2 and Worker Deployment Docs
 
-- **Status:** ✅ Complete with documented deviation (report archived; see [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+- **Status:** ✅ Complete with documented deviation (report archived; see [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 - **Delivered:** Verification-loop persistence contract (workflow checkpoint `verify_step_result` with PMA-to-PAA review JSON), BDD scenario and E2E (`e2e_0500_workflow_api`), stdlib reference runner (`scripts/workflow_runner_stub/minimal_runner.py`), worker deployment docs updated (normative vs deferred topology), MVP plan drift notes updated.
 - **Explicit deviation:** A first-class **Python LangGraph library** process (P2-06) implementing all graph nodes is **not present** in the repository.
   The orchestrator workflow HTTP API and persistence contract are implemented, tested, and documented; production graph-node wiring to MCP and Worker API remains follow-on work.
 
 #### Task 11: Postgres Schema Documentation Refactoring
 
-- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+- **Status:** ✅ Complete (report archived; see [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 - **Delivered:** Table definitions distributed from monolithic `postgres_schema.md` into domain-specific tech specs, `postgres_schema.md` retained as index/overview with cross-links.
 
 #### Task 12: Documentation and Final Closeout
 
-- **Status:** ✅ Complete (closeout archived; see [2026-03-29_review_consolidated_summary.md](2026-03-29_review_consolidated_summary.md)).
+- **Status:** ✅ Complete (closeout archived; see [2026-03-29_review_consolidated_summary.md](old/2026-03-29_review_consolidated_summary.md)).
 - **Delivered:** Source plans updated with completion/superseded status, `_bugs.md` updated, final validation (`just ci`, `just e2e`, `just docs-check`), remaining risks documented.
 
 ## MVP Phase Alignment

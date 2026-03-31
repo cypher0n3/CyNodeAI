@@ -9,6 +9,7 @@ require (
 	github.com/cypher0n3/cynodeai/go_shared_libs v0.0.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/uuid v1.6.0
+	golang.org/x/crypto v0.45.0
 	golang.org/x/sys v0.42.0
 	gorm.io/gorm v1.31.1
 )

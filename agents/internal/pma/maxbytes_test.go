@@ -11,7 +11,7 @@ import (
 )
 
 func TestMaxBytes_OversizeChatCompletionBodyRejected(t *testing.T) {
-	h := ChatCompletionHandler("", slog.Default())
+	h := ChatCompletionHandler("", slog.Default(), NewChatDepsFromEnv())
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	pad := strings.Repeat("x", int(httplimits.DefaultMaxAPIRequestBodyBytes)+1024)

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"log/slog"
@@ -164,6 +165,65 @@ func TestWorkflowHandler_Start_DuplicateDifferentHolder_Conflict(t *testing.T) {
 	}
 }
 
+func TestWorkflowHandler_Start_IdempotentAlreadyRunning(t *testing.T) {
+	mock := testutil.NewMockDB()
+	taskID := uuid.New()
+	mock.AddTask(&models.Task{
+		TaskBase: models.TaskBase{Status: models.TaskStatusPending},
+		ID:       taskID,
+	})
+	leaseID := uuid.New()
+	holder := "runner-1"
+	exp := time.Now().UTC().Add(time.Hour)
+	mock.TaskWorkflowLeases[taskID] = &models.TaskWorkflowLease{
+		TaskWorkflowLeaseBase: models.TaskWorkflowLeaseBase{
+			TaskID:    taskID,
+			LeaseID:   leaseID,
+			HolderID:  &holder,
+			ExpiresAt: &exp,
+		},
+		ID: uuid.New(),
+	}
+	h := NewWorkflowHandler(mock, slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})))
+	body := map[string]interface{}{
+		"task_id":         taskID.String(),
+		"holder_id":       holder,
+		"idempotency_key": leaseID.String(),
+	}
+	req := httptest.NewRequest("POST", "/v1/workflow/start", jsonBody(t, body))
+	rec := httptest.NewRecorder()
+	h.Start(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Start idempotent: got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp StartWorkflowResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Status != "already_running" {
+		t.Errorf("want already_running, got %+v", resp)
+	}
+}
+
+//nolint:dupl // same arrange/act/assert shape as SaveCheckpoint store error test (different mock + handler).
+func TestWorkflowHandler_Start_GetWorkflowLeaseError_InternalError(t *testing.T) {
+	mock := testutil.NewMockDB()
+	taskID := uuid.New()
+	mock.AddTask(&models.Task{
+		TaskBase: models.TaskBase{Status: models.TaskStatusPending},
+		ID:       taskID,
+	})
+	mock.GetTaskWorkflowLeaseErr = errors.New("lease read failed")
+	h := NewWorkflowHandler(mock, slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})))
+	body := map[string]interface{}{"task_id": taskID.String(), "holder_id": "runner-1"}
+	req := httptest.NewRequest("POST", "/v1/workflow/start", jsonBody(t, body))
+	rec := httptest.NewRecorder()
+	h.Start(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("Start on GetTaskWorkflowLease error: got %d", rec.Code)
+	}
+}
+
 func TestWorkflowHandler_Resume_NotFound(t *testing.T) {
 	mock := testutil.NewMockDB()
 	h := NewWorkflowHandler(mock, slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})))
@@ -254,6 +314,7 @@ func TestWorkflowHandler_Resume_GetCheckpointError_InternalError(t *testing.T) {
 	}
 }
 
+//nolint:dupl // same arrange/act/assert shape as Start lease error test (different mock + handler).
 func TestWorkflowHandler_SaveCheckpoint_StoreError_InternalError(t *testing.T) {
 	mock := testutil.NewMockDB()
 	taskID := uuid.New()

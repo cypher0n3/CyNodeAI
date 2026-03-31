@@ -2,6 +2,7 @@ package nodepayloads
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -158,5 +159,32 @@ func TestCapabilityReportManagedServicesStatusJSON(t *testing.T) {
 	got := decoded.ManagedServicesStatus.Services[0]
 	if got.State != "ready" || len(got.Endpoints) != 1 {
 		t.Errorf("unexpected service status: %+v", got)
+	}
+}
+
+func TestRegistrationRequest_Validate(t *testing.T) {
+	t.Parallel()
+	if err := (&RegistrationRequest{}).Validate(); err == nil {
+		t.Fatal("empty PSK: want error")
+	}
+	r := &RegistrationRequest{
+		PSK: "psk",
+		Capability: CapabilityReport{
+			Version: 1,
+			Node:    CapabilityNode{NodeSlug: "n1"},
+		},
+	}
+	if err := r.Validate(); err != nil {
+		t.Fatalf("valid: %v", err)
+	}
+	r2 := &RegistrationRequest{PSK: "x", Capability: CapabilityReport{Version: 0, Node: CapabilityNode{NodeSlug: "n"}}}
+	if err := r2.Validate(); err == nil {
+		t.Fatal("bad version: want error")
+	}
+	var nilReq *RegistrationRequest
+	if err := nilReq.Validate(); err == nil {
+		t.Fatal("nil: want error")
+	} else if !strings.Contains(err.Error(), "nil") {
+		t.Fatalf("got %v", err)
 	}
 }

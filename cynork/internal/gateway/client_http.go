@@ -61,6 +61,46 @@ func (c *Client) doPostJSON(ctx context.Context, path string, reqBody any, wantS
 	return nil
 }
 
+// doPostJSONWithHTTPClient posts JSON with the given client (e.g. extended timeout for task ready).
+func (c *Client) doPostJSONWithHTTPClient(ctx context.Context, hc *http.Client, path string, reqBody any, wantStatus int, out any) error {
+	if hc == nil {
+		hc = c.HTTPClient
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshal request: %w", err)
+	}
+	baseStr, tok := c.readURLAndToken()
+	base, err := url.Parse(baseStr)
+	if err != nil {
+		return fmt.Errorf("invalid base URL: %w", err)
+	}
+	u, err := base.Parse(path)
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
+	resp, err := hc.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != wantStatus {
+		return c.parseError(resp)
+	}
+	if err := decodeResponseJSON(resp, out); err != nil {
+		return fmt.Errorf("decode response: %w", err)
+	}
+	return nil
+}
+
 // doPostJSONNoAuth posts JSON without Authorization header (e.g. refresh).
 func (c *Client) doPostJSONNoAuth(ctx context.Context, path string, reqBody any, wantStatus int, out any) error {
 	body, err := json.Marshal(reqBody)

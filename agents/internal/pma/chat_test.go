@@ -3,16 +3,13 @@ package pma
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
-	"syscall"
 	"testing"
 )
 
@@ -119,7 +116,7 @@ func mockInferenceHandler(status int, body string) http.HandlerFunc {
 }
 
 func TestChatCompletionHandler_MethodNotAllowed(t *testing.T) {
-	handler := ChatCompletionHandler("", slog.Default())
+	handler := ChatCompletionHandler("", slog.Default(), NewChatDepsFromEnv())
 	req := httptest.NewRequest(http.MethodGet, "/internal/chat/completion", http.NoBody)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
@@ -138,7 +135,7 @@ func TestChatCompletionHandler_BadRequest(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := ChatCompletionHandler("", slog.Default())
+			handler := ChatCompletionHandler("", slog.Default(), NewChatDepsFromEnv())
 			req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(tt.body)))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
@@ -163,7 +160,7 @@ func TestChatCompletionHandler_Success(t *testing.T) {
 		}
 	}()
 
-	handler := ChatCompletionHandler("sys", slog.Default())
+	handler := ChatCompletionHandler("sys", slog.Default(), NewChatDepsFromEnv())
 	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(`{"messages":[{"role":"user","content":"hi"}]}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -189,7 +186,7 @@ func TestChatCompletionHandler_InferenceErrorField(t *testing.T) {
 		}
 	}()
 
-	handler := ChatCompletionHandler("", slog.Default())
+	handler := ChatCompletionHandler("", slog.Default(), NewChatDepsFromEnv())
 	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(`{"messages":[{"role":"user","content":"hi"}]}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -214,7 +211,7 @@ func TestChatCompletionHandler_InferenceError(t *testing.T) {
 		}
 	}()
 
-	handler := ChatCompletionHandler("", slog.Default())
+	handler := ChatCompletionHandler("", slog.Default(), NewChatDepsFromEnv())
 	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(`{"messages":[{"role":"user","content":"hi"}]}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -263,7 +260,7 @@ func TestPrepareChatCompletionRequest_UnsupportedMIME(t *testing.T) {
 }
 
 func TestChatCompletionHandler_UnsupportedChatFileMIME(t *testing.T) {
-	handler := ChatCompletionHandler("", slog.Default())
+	handler := ChatCompletionHandler("", slog.Default(), NewChatDepsFromEnv())
 	body := `{"messages":[{"role":"user","content":"hi"}],"chat_files":[{"name":"x.bin","mime_type":"application/octet-stream","text":"data"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -337,7 +334,7 @@ func TestChatCompletionHandler_SuccessWithMCPPath(t *testing.T) {
 	testLLMForCompletion = &mockLLM{responses: []string{"pma response"}}
 	defer func() { testLLMForCompletion = oldHook }()
 
-	handler := ChatCompletionHandler("sys", slog.Default())
+	handler := ChatCompletionHandler("sys", slog.Default(), NewChatDepsFromEnv())
 	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(`{"messages":[{"role":"user","content":"hi"}]}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -364,7 +361,7 @@ func TestChatCompletionHandler_StreamLangchainPath(t *testing.T) {
 	testLLMForCompletion = &mockLLM{responses: []string{"streamed"}}
 	defer func() { testLLMForCompletion = oldHook }()
 
-	handler := ChatCompletionHandler("sys", slog.Default())
+	handler := ChatCompletionHandler("sys", slog.Default(), NewChatDepsFromEnv())
 	body := `{"messages":[{"role":"user","content":"hi"}],"stream":true}`
 	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -406,7 +403,7 @@ func TestChatCompletionHandler_SmallModelDirectGeneration(t *testing.T) {
 	t.Setenv("OLLAMA_BASE_URL", mockOllama.URL)
 	t.Setenv("INFERENCE_MODEL", "qwen3.5:0.8b")
 
-	handler := ChatCompletionHandler("sys", slog.Default())
+	handler := ChatCompletionHandler("sys", slog.Default(), NewChatDepsFromEnv())
 	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(`{"messages":[{"role":"user","content":"hi"}]}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -433,7 +430,7 @@ func testChatCompletionCapableModelEmptyOutput(t *testing.T, reqBody string) {
 	testLLMForCompletion = &mockLLM{responses: []string{"", ""}}
 	defer func() { testLLMForCompletion = oldHook }()
 
-	handler := ChatCompletionHandler("sys", slog.Default())
+	handler := ChatCompletionHandler("sys", slog.Default(), NewChatDepsFromEnv())
 	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(reqBody)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -477,7 +474,7 @@ func TestChatCompletionHandler_CapableModel_UnexecutedToolCallFallback(t *testin
 	testLLMForCompletion = &mockLLM{responses: []string{"Let me fetch the task list for you."}}
 	defer func() { testLLMForCompletion = oldHook }()
 
-	handler := ChatCompletionHandler("sys", slog.Default())
+	handler := ChatCompletionHandler("sys", slog.Default(), NewChatDepsFromEnv())
 	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion",
 		bytes.NewReader([]byte(`{"messages":[{"role":"user","content":"what tasks can you see?"}]}`)))
 	req.Header.Set("Content-Type", "application/json")
@@ -508,7 +505,7 @@ func TestChatCompletionHandler_CapableModel_ThinkBlockStripped(t *testing.T) {
 	testLLMForCompletion = &mockLLM{responses: []string{"<think>internal reasoning</think>The answer is 42."}}
 	defer func() { testLLMForCompletion = oldHook }()
 
-	handler := ChatCompletionHandler("sys", slog.Default())
+	handler := ChatCompletionHandler("sys", slog.Default(), NewChatDepsFromEnv())
 	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion",
 		bytes.NewReader([]byte(`{"messages":[{"role":"user","content":"what is 6x7?"}]}`)))
 	req.Header.Set("Content-Type", "application/json")
@@ -737,7 +734,7 @@ func TestChatCompletionHandler_EmptyOutputRetriesWithCurrentMessage(t *testing.T
 	})
 	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
-	handler := ChatCompletionHandler("sys", slog.Default())
+	handler := ChatCompletionHandler("sys", slog.Default(), NewChatDepsFromEnv())
 	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
@@ -788,7 +785,7 @@ func TestCallInference_StreamWithEmptyLinesAndThinkBlocks(t *testing.T) {
 	t.Setenv("OLLAMA_BASE_URL", srv.URL)
 	t.Setenv("INFERENCE_MODEL", "qwen3.5:0.8b")
 
-	handler := ChatCompletionHandler("", slog.Default())
+	handler := ChatCompletionHandler("", slog.Default(), NewChatDepsFromEnv())
 	reqBody, _ := json.Marshal(map[string]interface{}{
 		"messages": []map[string]string{{"role": "user", "content": "hi"}},
 	})
@@ -823,7 +820,7 @@ func TestCallInference_StreamErrorChunk(t *testing.T) {
 	t.Setenv("OLLAMA_BASE_URL", srv.URL)
 	t.Setenv("INFERENCE_MODEL", "qwen3.5:0.8b")
 
-	handler := ChatCompletionHandler("", slog.Default())
+	handler := ChatCompletionHandler("", slog.Default(), NewChatDepsFromEnv())
 	reqBody, _ := json.Marshal(map[string]interface{}{
 		"messages": []map[string]string{{"role": "user", "content": "hi"}},
 	})
@@ -840,13 +837,14 @@ func TestCanStreamCompletion_NoMCPClient(t *testing.T) {
 	// With no MCP gateway env vars set, BaseURL is empty so canStreamCompletion returns true.
 	t.Setenv("PMA_MCP_GATEWAY_URL", "")
 	t.Setenv("MCP_GATEWAY_URL", "")
+	deps := NewChatDepsFromEnv()
 	req := &InternalChatCompletionRequest{
 		Messages: []struct {
 			Role    string `json:"role"`
 			Content string `json:"content"`
 		}{{Role: "user", Content: "hi"}},
 	}
-	if !canStreamCompletion(req) {
+	if !canStreamCompletion(req, deps) {
 		t.Error("canStreamCompletion should return true when no MCP gateway is configured")
 	}
 }
@@ -873,7 +871,7 @@ func TestChatCompletionHandler_StreamTrue_Success(t *testing.T) {
 	t.Setenv("PMA_MCP_GATEWAY_URL", "")
 	t.Setenv("MCP_GATEWAY_URL", "")
 
-	handler := ChatCompletionHandler("sys", slog.Default())
+	handler := ChatCompletionHandler("sys", slog.Default(), NewChatDepsFromEnv())
 	body, _ := json.Marshal(map[string]interface{}{
 		"messages": []map[string]string{{"role": "user", "content": "hi"}},
 		"stream":   true,
@@ -899,7 +897,7 @@ func TestChatCompletionHandler_StreamTrue_InferenceError(t *testing.T) {
 	t.Setenv("PMA_MCP_GATEWAY_URL", "")
 	t.Setenv("MCP_GATEWAY_URL", "")
 
-	handler := ChatCompletionHandler("sys", slog.Default())
+	handler := ChatCompletionHandler("sys", slog.Default(), NewChatDepsFromEnv())
 	body, _ := json.Marshal(map[string]interface{}{
 		"messages": []map[string]string{{"role": "user", "content": "hi"}},
 		"stream":   true,
@@ -921,7 +919,7 @@ func TestChatCompletionHandler_StreamTrue_NoContentDeltas(t *testing.T) {
 	t.Setenv("OLLAMA_BASE_URL", mockInference.URL)
 	t.Setenv("PMA_MCP_GATEWAY_URL", "")
 	t.Setenv("MCP_GATEWAY_URL", "")
-	handler := ChatCompletionHandler("sys", slog.Default())
+	handler := ChatCompletionHandler("sys", slog.Default(), NewChatDepsFromEnv())
 	body, _ := json.Marshal(map[string]interface{}{
 		"messages": []map[string]string{{"role": "user", "content": "hi"}},
 		"stream":   true,
@@ -984,46 +982,4 @@ func TestStreamCompletionWriteChunk_InvalidJSON(t *testing.T) {
 	if done || stop {
 		t.Errorf("invalid JSON: done=%v stop=%v, want false,false", done, stop)
 	}
-}
-
-func TestTruncate(t *testing.T) {
-	if got := truncate("short", 10); got != "short" {
-		t.Errorf("truncate(short,10)=%q", got)
-	}
-	if got := truncate("longer than five", 5); got != "longe…" {
-		t.Errorf("truncate(longer...,5)=%q", got)
-	}
-}
-
-func TestIsClientDisconnect(t *testing.T) {
-	if isClientDisconnect(nil) {
-		t.Error("nil is not disconnect")
-	}
-	if !isClientDisconnect(syscall.EPIPE) {
-		t.Error("EPIPE")
-	}
-	if !isClientDisconnect(syscall.ECONNRESET) {
-		t.Error("ECONNRESET")
-	}
-	if !isClientDisconnect(&net.OpError{Err: syscall.EPIPE}) {
-		t.Error("OpError EPIPE")
-	}
-	if !isClientDisconnect(errors.New("broken pipe")) {
-		t.Error("broken pipe string")
-	}
-	if !isClientDisconnect(errors.New("connection reset by peer")) {
-		t.Error("reset string")
-	}
-	if isClientDisconnect(errors.New("other")) {
-		t.Error("other error")
-	}
-}
-
-func TestLogStreamCompletionInferenceError(t *testing.T) {
-	logStreamCompletionInferenceError(nil, errors.New("x"), false)
-	var buf bytes.Buffer
-	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	logStreamCompletionInferenceError(log, errors.New("pre"), false)
-	logStreamCompletionInferenceError(log, syscall.EPIPE, true)
-	logStreamCompletionInferenceError(log, errors.New("post"), true)
 }

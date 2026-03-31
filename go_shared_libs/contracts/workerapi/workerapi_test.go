@@ -3,6 +3,7 @@ package workerapi
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -29,7 +30,7 @@ func TestValidateRequest(t *testing.T) {
 			t.Fatalf("want RequestValidationError, got %v", err)
 		}
 	}
-	req := &RunJobRequest{Version: 1, Sandbox: SandboxSpec{Image: "x"}}
+	req := &RunJobRequest{Version: 1, TaskID: "task", JobID: "job", Sandbox: SandboxSpec{Image: "x"}}
 	if err := ValidateRequest(req); err == nil {
 		t.Fatal("empty command: want error")
 	}
@@ -37,9 +38,35 @@ func TestValidateRequest(t *testing.T) {
 	if err := ValidateRequest(req); err != nil {
 		t.Fatalf("valid: %v", err)
 	}
-	req2 := &RunJobRequest{Version: 1, Sandbox: SandboxSpec{Image: "img", JobSpecJSON: "{}"}}
+	req2 := &RunJobRequest{Version: 1, TaskID: "t", JobID: "j", Sandbox: SandboxSpec{Image: "img", JobSpecJSON: "{}"}}
 	if err := ValidateRequest(req2); err != nil {
 		t.Fatalf("SBA without command: %v", err)
+	}
+}
+
+func TestValidateRequest_fieldErrors(t *testing.T) {
+	t.Parallel()
+	base := RunJobRequest{Version: 1, TaskID: "t", JobID: "j", Sandbox: SandboxSpec{Command: []string{"true"}}}
+	if err := ValidateRequest(&RunJobRequest{Version: 2, TaskID: "t", JobID: "j", Sandbox: base.Sandbox}); err == nil || !strings.Contains(err.Error(), "version") {
+		t.Fatalf("version: %v", err)
+	}
+	if err := ValidateRequest(&RunJobRequest{Version: 1, TaskID: "", JobID: "j", Sandbox: base.Sandbox}); err == nil {
+		t.Fatal("task_id")
+	}
+	if err := ValidateRequest(&RunJobRequest{Version: 1, TaskID: "t", JobID: "", Sandbox: base.Sandbox}); err == nil {
+		t.Fatal("job_id")
+	}
+	if err := ValidateRequest(&RunJobRequest{Version: 1, TaskID: "t", JobID: "j", Sandbox: SandboxSpec{}}); err == nil {
+		t.Fatal("command")
+	}
+	if err := ValidateRequest(&RunJobRequest{Version: 1, TaskID: "t", JobID: "j", Sandbox: SandboxSpec{Command: []string{"x"}, TimeoutSeconds: -1}}); err == nil {
+		t.Fatal("timeout")
+	}
+	if err := ValidateRequest(&RunJobRequest{Version: 1, TaskID: "t", JobID: "j", Sandbox: SandboxSpec{Command: []string{"x"}, NetworkPolicy: "bogus"}}); err == nil {
+		t.Fatal("network_policy")
+	}
+	if err := ValidateRequest(&base); err != nil {
+		t.Fatal(err)
 	}
 }
 

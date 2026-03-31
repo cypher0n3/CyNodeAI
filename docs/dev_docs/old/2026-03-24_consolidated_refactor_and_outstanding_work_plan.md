@@ -2260,7 +2260,7 @@ Completed plans are listed for context; outstanding plans feed tasks in this doc
   - [2026-03-23_e2e_tech_spec_alignment_review.md](2026-03-23_e2e_tech_spec_alignment_review.md - Alignment gaps feed Task 3.
   - [2026-03-22_cynork_tui_spec_delta.md](2026-03-22_cynork_tui_spec_delta.md) - TUI implementation vs spec delta; feeds Task 2.
   - [_bugs.md](../_bugs.md) - Bugs 1-2 fixed; Bugs 3-5 open; feeds Tasks 2 and 4.
-  - [2026-03-29 review consolidated summary](../2026-03-29_review_consolidated_summary.md) (replaces historical incorporation report) - Context only; no direct tasks.
+  - [2026-03-29 review consolidated summary](2026-03-29_review_consolidated_summary.md) (replaces historical incorporation report) - Context only; no direct tasks.
   - [2026-03-15_streaming_specs_implementation_plan.md](2026-03-15_streaming_specs_implementation_plan.md) - Tasks 1-4 complete; remaining work extracted into 2026-03-19 streaming remaining work plan.
 
 ## References
@@ -2505,7 +2505,7 @@ Address the gaps identified in the E2E vs tech spec alignment review: add E2E co
 
 #### Task 3 Requirements and Specifications
 
-- E2E vs tech spec alignment (archived; see [2026-03-29 review consolidated summary](../2026-03-29_review_consolidated_summary.md)) (Gaps / Follow-Ups were in the original review).
+- E2E vs tech spec alignment (archived; see [2026-03-29 review consolidated summary](2026-03-29_review_consolidated_summary.md)) (Gaps / Follow-Ups were in the original review).
 - [docs/tech_specs/cynork_tui_slash_commands.md](../../tech_specs/cynork/cynork_tui_slash_commands.md) (`/copy` per Task 2 spec update).
 - [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) (composer keys, Ctrl+Up/Ctrl+Down history).
 - E2E scripts: `scripts/test_scripts/e2e_0760_tui_slash_commands.py`, `scripts/test_scripts/e2e_0765_tui_composer_editor.py`.
@@ -2571,7 +2571,7 @@ All three test layers MUST pass before this task is complete.
 
 **Task 3 verification note (2026-03-27):** `go test ./cynork/...` and `go test ./cynork/_bdd` passed; `cynork/internal/tui/model.go` was split (`model_thread_commands.go`) so `just lint-go` passes the line-count rule.
 Re-run `just e2e --tags tui_pty` locally when validating the full stack.
-See [2026-03-29 review consolidated summary](../2026-03-29_review_consolidated_summary.md) for the archived Task 3 completion narrative.
+See [2026-03-29 review consolidated summary](2026-03-29_review_consolidated_summary.md) for the archived Task 3 completion narrative.
 
 ---
 

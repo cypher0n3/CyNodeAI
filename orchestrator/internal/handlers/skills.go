@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 
@@ -18,12 +19,12 @@ const skillScopeUser = "user"
 
 // SkillsHandler handles GET/POST /v1/skills and GET/PUT/DELETE /v1/skills/{id}.
 type SkillsHandler struct {
-	db     database.Store
+	db     database.SkillStore
 	logger *slog.Logger
 }
 
 // NewSkillsHandler creates a skills handler.
-func NewSkillsHandler(db database.Store, logger *slog.Logger) *SkillsHandler {
+func NewSkillsHandler(db database.SkillStore, logger *slog.Logger) *SkillsHandler {
 	return &SkillsHandler{db: db, logger: logger}
 }
 
@@ -71,7 +72,12 @@ func (h *SkillsHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	scopeFilter := r.URL.Query().Get("scope")
 	ownerFilter := r.URL.Query().Get("owner")
-	skills, err := h.db.ListSkillsForUser(ctx, *userID, scopeFilter, ownerFilter)
+	limit, offset, ok := parseLimitOffsetQuery(r, database.DefaultSkillPageLimit, database.MaxSkillPageLimit)
+	if !ok {
+		WriteBadRequest(w, "Invalid limit or offset")
+		return
+	}
+	skills, total, err := h.db.ListSkillsForUser(ctx, *userID, scopeFilter, ownerFilter, limit, offset)
 	if err != nil {
 		h.logger.Error("list skills", "error", err)
 		WriteInternalError(w, "Failed to list skills")
@@ -81,7 +87,16 @@ func (h *SkillsHandler) List(w http.ResponseWriter, r *http.Request) {
 	for _, s := range skills {
 		items = append(items, skillToMeta(s))
 	}
-	WriteJSON(w, http.StatusOK, map[string]interface{}{"skills": items})
+	out := map[string]interface{}{
+		"skills":      items,
+		"total_count": total,
+	}
+	if int64(offset)+int64(len(skills)) < total && len(skills) > 0 {
+		next := offset + len(skills)
+		out["next_offset"] = next
+		out["next_cursor"] = strconv.Itoa(next)
+	}
+	WriteJSON(w, http.StatusOK, out)
 }
 
 // Get handles GET /v1/skills/{id}.

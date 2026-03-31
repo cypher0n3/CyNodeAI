@@ -35,8 +35,8 @@ type ChatStreamDelta struct {
 	AmendmentScope           string // "turn" (default) or "iteration"
 	AmendmentTargetIteration int
 	Thinking                 string
-	ToolName  string
-	ToolArgs  string
+	ToolName                 string
+	ToolArgs                 string
 	// IterationStart is true when the gateway emits cynodeai.iteration_start; Iteration is the iteration index.
 	IterationStart   bool
 	Iteration        int

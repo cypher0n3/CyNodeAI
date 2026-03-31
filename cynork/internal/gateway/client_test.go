@@ -929,32 +929,6 @@ func TestClient_ListModels_Success(t *testing.T) {
 	}
 }
 
-func TestClient_PostTaskReady(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/tasks/t-1/ready" || r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(userapi.TaskResponse{
-			ID:            "t-1",
-			Status:        "queued",
-			PlanningState: userapi.PlanningStateReady,
-		})
-	}))
-	defer server.Close()
-	client := NewClient(server.URL)
-	client.SetToken("tok")
-	out, err := client.PostTaskReady(context.Background(), "t-1")
-	if err != nil {
-		t.Fatalf("PostTaskReady: %v", err)
-	}
-	if out.ResolveTaskID() != "t-1" || out.PlanningState != userapi.PlanningStateReady {
-		t.Fatalf("unexpected response: %+v", out)
-	}
-}
-
 func TestIsUnauthorized(t *testing.T) {
 	t.Parallel()
 	if IsUnauthorized(nil) {

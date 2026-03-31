@@ -744,6 +744,24 @@ func TestIntegration_GetArtifactByTaskIDAndPath(t *testing.T) {
 	}
 }
 
+func TestIntegration_WithTx(t *testing.T) {
+	db, ctx := integrationDB(t)
+	integrationEnsureInttestUser(t, db, ctx)
+	err := db.WithTx(ctx, func(ctx context.Context, tx Store) error {
+		_, err := tx.GetUserByHandle(ctx, "inttest-user")
+		return err
+	})
+	if err != nil {
+		t.Fatalf("WithTx: %v", err)
+	}
+	err = db.WithTx(ctx, func(context.Context, Store) error {
+		return errors.New("rollback")
+	})
+	if err == nil || err.Error() != "rollback" {
+		t.Fatalf("WithTx: want rollback error, got %v", err)
+	}
+}
+
 // integrationEnsureInttestUser returns the shared integration user, creating it if missing.
 // Tests must not rely on alphabetical order relative to TestIntegration_User.
 func integrationEnsureInttestUser(t *testing.T, db *DB, ctx context.Context) *models.User {

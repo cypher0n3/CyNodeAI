@@ -42,132 +42,17 @@ func wrapErr(err error, op string) error {
 
 // Store defines the interface for database operations.
 // This interface enables unit testing with mock implementations.
+// It composes focused sub-interfaces; see store_interfaces.go.
 type Store interface {
-	// User operations
-	CreateUser(ctx context.Context, handle string, email *string) (*models.User, error)
-	GetUserByHandle(ctx context.Context, handle string) (*models.User, error)
-	GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error)
-
-	// Password credential operations
-	CreatePasswordCredential(ctx context.Context, userID uuid.UUID, passwordHash []byte, hashAlg string) (*models.PasswordCredential, error)
-	GetPasswordCredentialByUserID(ctx context.Context, userID uuid.UUID) (*models.PasswordCredential, error)
-
-	// Refresh session operations
-	CreateRefreshSession(ctx context.Context, userID uuid.UUID, tokenHash []byte, expiresAt time.Time) (*models.RefreshSession, error)
-	GetActiveRefreshSession(ctx context.Context, tokenHash []byte) (*models.RefreshSession, error)
-	InvalidateRefreshSession(ctx context.Context, sessionID uuid.UUID) error
-	InvalidateAllUserSessions(ctx context.Context, userID uuid.UUID) error
-
-	// Auth audit log operations (subjectHandle, reason per postgres_schema.md)
-	CreateAuthAuditLog(ctx context.Context, userID *uuid.UUID, eventType string, success bool, ipAddress, userAgent, subjectHandle, reason *string) error
-
-	// Task operations (taskName optional; when set, normalized and made unique per user).
-	CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt string, taskName *string, projectID ...*uuid.UUID) (*models.Task, error)
-	GetTaskByID(ctx context.Context, id uuid.UUID) (*models.Task, error)
-	// GetTaskBySummary looks up the most recently created task matching summary for the given user.
-	// Returns ErrNotFound when no match exists.
-	GetTaskBySummary(ctx context.Context, userID uuid.UUID, summary string) (*models.Task, error)
-	UpdateTaskStatus(ctx context.Context, taskID uuid.UUID, status string) error
-	UpdateTaskSummary(ctx context.Context, taskID uuid.UUID, summary string) error
-	UpdateTaskMetadata(ctx context.Context, taskID uuid.UUID, metadata *string) error
-	UpdateTaskPlanningState(ctx context.Context, taskID uuid.UUID, planningState string) error
-	ListTasksByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*models.Task, error)
-	GetJobsByTaskID(ctx context.Context, taskID uuid.UUID) ([]*models.Job, error)
-	CreateJob(ctx context.Context, taskID uuid.UUID, payload string) (*models.Job, error)
-	CreateJobWithID(ctx context.Context, taskID, jobID uuid.UUID, payload string) (*models.Job, error)
-	CreateJobCompleted(ctx context.Context, taskID, jobID uuid.UUID, result string) (*models.Job, error)
-	GetJobByID(ctx context.Context, id uuid.UUID) (*models.Job, error)
-	UpdateJobStatus(ctx context.Context, jobID uuid.UUID, status string) error
-	AssignJobToNode(ctx context.Context, jobID, nodeID uuid.UUID) error
-	CompleteJob(ctx context.Context, jobID uuid.UUID, result, status string) error
-	GetNextQueuedJob(ctx context.Context) (*models.Job, error)
-
-	// Node operations
-	CreateNode(ctx context.Context, nodeSlug string) (*models.Node, error)
-	GetNodeBySlug(ctx context.Context, slug string) (*models.Node, error)
-	GetNodeByID(ctx context.Context, id uuid.UUID) (*models.Node, error)
-	UpdateNodeStatus(ctx context.Context, nodeID uuid.UUID, status string) error
-	UpdateNodeLastSeen(ctx context.Context, nodeID uuid.UUID) error
-	SaveNodeCapabilitySnapshot(ctx context.Context, nodeID uuid.UUID, capJSON string) error
-	GetLatestNodeCapabilitySnapshot(ctx context.Context, nodeID uuid.UUID) (string, error)
-	UpdateNodeCapability(ctx context.Context, nodeID uuid.UUID, capHash string) error
-	ListActiveNodes(ctx context.Context) ([]*models.Node, error)
-	ListDispatchableNodes(ctx context.Context) ([]*models.Node, error)
-	// ListNodes lists registered worker nodes (non-deleted), ordered by node_slug, with limit/offset pagination.
-	ListNodes(ctx context.Context, limit, offset int) ([]*models.Node, error)
-	UpdateNodeConfigVersion(ctx context.Context, nodeID uuid.UUID, configVersion string) error
-	UpdateNodeConfigAck(ctx context.Context, nodeID uuid.UUID, configVersion, status string, ackAt time.Time, errMsg *string) error
-	UpdateNodeWorkerAPIConfig(ctx context.Context, nodeID uuid.UUID, targetURL, bearerToken string) error
-
-	// MCP tool call audit (P2-02): write one record per routed tool call (allow/deny, success/error).
-	CreateMcpToolCallAuditLog(ctx context.Context, rec *models.McpToolCallAuditLog) error
-
-	// Preference operations (P2-03): db.preference.get, list, effective, create, update, delete.
-	GetPreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key string) (*models.PreferenceEntry, error)
-	ListPreferences(ctx context.Context, scopeType string, scopeID *uuid.UUID, keyPrefix string, limit int, cursor string) ([]*models.PreferenceEntry, string, error)
-	GetEffectivePreferencesForTask(ctx context.Context, taskID uuid.UUID) (map[string]interface{}, error)
-	CreatePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, reason, updatedBy *string) (*models.PreferenceEntry, error)
-	UpdatePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.PreferenceEntry, error)
-	DeletePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key string, expectedVersion *int, reason *string) error
-
-	// System settings (system_setting.* MCP tools; orchestrator_bootstrap.md).
-	GetSystemSetting(ctx context.Context, key string) (*models.SystemSetting, error)
-	ListSystemSettings(ctx context.Context, keyPrefix string, limit int, cursor string) ([]*models.SystemSetting, string, error)
-	CreateSystemSetting(ctx context.Context, key, value, valueType string, reason, updatedBy *string) (*models.SystemSetting, error)
-	UpdateSystemSetting(ctx context.Context, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.SystemSetting, error)
-	DeleteSystemSetting(ctx context.Context, key string, expectedVersion *int, reason *string) error
-
-	// Task artifacts (artifact.get MCP tool; REQ-ORCHES-0127 attachment ingestion).
-	GetArtifactByTaskIDAndPath(ctx context.Context, taskID uuid.UUID, path string) (*models.TaskArtifact, error)
-	CreateTaskArtifact(ctx context.Context, taskID uuid.UUID, path, storageRef string, sizeBytes *int64) (*models.TaskArtifact, error)
-	ListArtifactPathsByTaskID(ctx context.Context, taskID uuid.UUID) ([]string, error)
-	GetOrCreateDefaultProjectForUser(ctx context.Context, userID uuid.UUID) (*models.Project, error)
-	GetProjectByID(ctx context.Context, id uuid.UUID) (*models.Project, error)
-	GetProjectBySlug(ctx context.Context, slug string) (*models.Project, error)
-	ListAuthorizedProjectsForUser(ctx context.Context, userID uuid.UUID, q string, limit, offset int) ([]*models.Project, error)
-
-	// Chat threads and messages (OpenAI-compatible chat API).
-	GetOrCreateActiveChatThread(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID) (*models.ChatThread, error)
-	// CreateChatThread unconditionally creates a new thread for (userID, projectID), bypassing the inactivity reuse window.
-	// Title is optional. Use when the user explicitly requests a new conversation (e.g. /thread new or --thread-new).
-	CreateChatThread(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID, title *string) (*models.ChatThread, error)
-	// GetThreadByResponseID resolves previous_response_id to the thread that owns that response (for continuation). Returns ErrNotFound if not found or not owned by userID.
-	GetThreadByResponseID(ctx context.Context, responseID string, userID uuid.UUID) (*models.ChatThread, error)
-	// ListChatThreads returns threads for the user, recent-first. Optional projectID filter. Pagination via limit and offset.
-	ListChatThreads(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID, limit, offset int) ([]*models.ChatThread, error)
-	// GetChatThreadByID returns one thread if it belongs to the user; otherwise ErrNotFound.
-	GetChatThreadByID(ctx context.Context, threadID, userID uuid.UUID) (*models.ChatThread, error)
-	// UpdateChatThreadTitle updates the thread title (rename). Thread must belong to userID.
-	UpdateChatThreadTitle(ctx context.Context, threadID, userID uuid.UUID, title string) error
-	AppendChatMessage(ctx context.Context, threadID uuid.UUID, role, content string, metadata *string) (*models.ChatMessage, error)
-	// ListChatMessages returns up to limit messages for the given thread, ordered oldest-first.
-	// A limit of 0 returns all messages.
-	ListChatMessages(ctx context.Context, threadID uuid.UUID, limit int) ([]*models.ChatMessage, error)
-	CreateChatAuditLog(ctx context.Context, rec *models.ChatAuditLog) error
-
-	// Skills (REQ-SKILLS-*, skills_storage_and_inference.md).
-	CreateSkill(ctx context.Context, name, content, scope string, ownerID *uuid.UUID, isSystem bool) (*models.Skill, error)
-	GetSkillByID(ctx context.Context, id uuid.UUID) (*models.Skill, error)
-	ListSkillsForUser(ctx context.Context, userID uuid.UUID, scopeFilter, ownerFilter string) ([]*models.Skill, error)
-	UpdateSkill(ctx context.Context, id uuid.UUID, name, content, scope *string) (*models.Skill, error)
-	DeleteSkill(ctx context.Context, id uuid.UUID) error
-	EnsureDefaultSkill(ctx context.Context, content string) error
-
-	// Workflow start gate (REQ-ORCHES-0152, REQ-ORCHES-0153, langgraph_mvp.md WorkflowStartGatePlanApproved).
-	EvaluateWorkflowStartGate(ctx context.Context, task *models.Task, requestedByPMA bool) (denyReason string, err error)
-
-	// Workflow lease and checkpoint (REQ-ORCHES-0144--0147, langgraph_mvp.md).
-	AcquireTaskWorkflowLease(ctx context.Context, taskID uuid.UUID, leaseID uuid.UUID, holderID string, expiresAt time.Time) (*models.TaskWorkflowLease, error)
-	ReleaseTaskWorkflowLease(ctx context.Context, taskID uuid.UUID, leaseID uuid.UUID) error
-	GetTaskWorkflowLease(ctx context.Context, taskID uuid.UUID) (*models.TaskWorkflowLease, error)
-	GetWorkflowCheckpoint(ctx context.Context, taskID uuid.UUID) (*models.WorkflowCheckpoint, error)
-	UpsertWorkflowCheckpoint(ctx context.Context, cp *models.WorkflowCheckpoint) error
-
-	// Access control and API egress (REQ-APIEGR-0110--0113, access_control.md).
-	ListAccessControlRulesForApiCall(ctx context.Context, subjectType string, subjectID *uuid.UUID, action, resourceType string) ([]*models.AccessControlRule, error)
-	CreateAccessControlAuditLog(ctx context.Context, rec *models.AccessControlAuditLog) error
-	HasActiveApiCredentialForUserAndProvider(ctx context.Context, userID uuid.UUID, provider string) (bool, error)
-	HasAnyActiveApiCredential(ctx context.Context) (bool, error)
+	UserStore
+	TaskStore
+	NodeStore
+	ChatStore
+	PreferenceStore
+	SkillStore
+	WorkflowStore
+	SystemSettingsStore
+	Transactional
 }
 
 // DB wraps GORM database operations.
@@ -276,6 +161,14 @@ func (db *DB) Close() error {
 // GORM returns the underlying *gorm.DB for migrations and raw operations.
 func (db *DB) GORM() *gorm.DB {
 	return db.db
+}
+
+// WithTx runs fn inside a single SQL transaction.
+func (db *DB) WithTx(ctx context.Context, fn func(ctx context.Context, tx Store) error) error {
+	return db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txDB := &DB{db: tx, workerBearerKey: db.workerBearerKey}
+		return fn(ctx, txDB)
+	})
 }
 
 // --- User operations ---

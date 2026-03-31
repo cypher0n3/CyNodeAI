@@ -328,7 +328,7 @@ func TestIntegration_CreateChatThread(t *testing.T) {
 
 func assertListChatMessages(t *testing.T, db *DB, ctx context.Context, threadID uuid.UUID) {
 	t.Helper()
-	msgs, err := db.ListChatMessages(ctx, threadID, 0)
+	msgs, _, err := db.ListChatMessages(ctx, threadID, 0, 0)
 	if err != nil {
 		t.Fatalf("ListChatMessages: %v", err)
 	}
@@ -338,7 +338,7 @@ func assertListChatMessages(t *testing.T, db *DB, ctx context.Context, threadID 
 	if msgs[0].Role != "user" || msgs[1].Role != "assistant" {
 		t.Errorf("ListChatMessages order: got [%s, %s]", msgs[0].Role, msgs[1].Role)
 	}
-	limited, err := db.ListChatMessages(ctx, threadID, 1)
+	limited, _, err := db.ListChatMessages(ctx, threadID, 1, 0)
 	if err != nil {
 		t.Fatalf("ListChatMessages (limit 1): %v", err)
 	}

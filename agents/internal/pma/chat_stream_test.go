@@ -27,7 +27,7 @@ func TestStreamOllamaChatToNDJSONOutcome_InferenceNonOK(t *testing.T) {
 			Role    string `json:"role"`
 			Content string `json:"content"`
 		}{{Role: "user", Content: "hi"}},
-	}, slog.Default())
+	}, slog.Default(), NewChatDepsFromEnv())
 	if out != streamNDJSONError {
 		t.Fatalf("got %v, want streamNDJSONError", out)
 	}
@@ -44,7 +44,7 @@ func TestStreamOllamaChatToNDJSONOutcome_EmptyStream(t *testing.T) {
 			Role    string `json:"role"`
 			Content string `json:"content"`
 		}{{Role: "user", Content: "hi"}},
-	}, slog.Default())
+	}, slog.Default(), NewChatDepsFromEnv())
 	if out != streamNDJSONEmpty {
 		t.Fatalf("got %v, want streamNDJSONEmpty", out)
 	}
@@ -64,7 +64,7 @@ func TestStreamTryLangchainNDJSON_NoMCPUsesOllamaPath(t *testing.T) {
 			Role    string `json:"role"`
 			Content string `json:"content"`
 		}{{Role: "user", Content: "hi"}},
-	}, slog.Default())
+	}, slog.Default(), NewChatDepsFromEnv())
 	if out != streamNDJSONError {
 		t.Fatalf("got %v, want streamNDJSONError", out)
 	}
@@ -90,7 +90,7 @@ func TestChatCompletionHandler_LangchainHardError(t *testing.T) {
 			oldHook := testLLMForCompletion
 			testLLMForCompletion = &mockLLM{errs: []error{errors.New("injected llm failure")}}
 			defer func() { testLLMForCompletion = oldHook }()
-			handler := ChatCompletionHandler("sys", slog.Default())
+			handler := ChatCompletionHandler("sys", slog.Default(), NewChatDepsFromEnv())
 			req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(tc.body)))
 			rec := httptest.NewRecorder()
 			handler(rec, req)
@@ -112,7 +112,7 @@ func TestChatCompletionHandler_StreamLangchain_EmptyStreamsRetries(t *testing.T)
 	oldHook := testLLMForCompletion
 	testLLMForCompletion = &mockLLM{responses: []string{"", ""}}
 	defer func() { testLLMForCompletion = oldHook }()
-	handler := ChatCompletionHandler("sys", slog.Default())
+	handler := ChatCompletionHandler("sys", slog.Default(), NewChatDepsFromEnv())
 	body := `{"messages":[{"role":"user","content":"hi"}],"stream":true}`
 	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(body)))
 	rec := httptest.NewRecorder()
@@ -182,7 +182,7 @@ func TestStreamCapableModelNDJSON_LangchainSuccess(t *testing.T) {
 			Content string `json:"content"`
 		}{{Role: "user", Content: "hi"}},
 	}
-	out := streamCapableModelNDJSON(context.Background(), rec, "sys", req, NewMCPClient(), "qwen3.5:9b", slog.Default())
+	out := streamCapableModelNDJSON(context.Background(), rec, "sys", req, NewMCPClient(), "qwen3.5:9b", slog.Default(), NewChatDepsFromEnv())
 	if out != streamNDJSONOK {
 		t.Fatalf("want streamNDJSONOK, got %v", out)
 	}
@@ -205,7 +205,7 @@ func TestStreamCapableModelNDJSON_HardLangchainError(t *testing.T) {
 			Content string `json:"content"`
 		}{{Role: "user", Content: "hi"}},
 	}
-	out := streamCapableModelNDJSON(context.Background(), rec, "sys", req, NewMCPClient(), "qwen3.5:9b", nil)
+	out := streamCapableModelNDJSON(context.Background(), rec, "sys", req, NewMCPClient(), "qwen3.5:9b", nil, NewChatDepsFromEnv())
 	if out != streamNDJSONError {
 		t.Fatalf("want streamNDJSONError, got %v", out)
 	}
@@ -229,7 +229,7 @@ func TestStreamCapableModelNDJSON_AgentNotFinishedFallsBackToOllama(t *testing.T
 			Content string `json:"content"`
 		}{{Role: "user", Content: "hi"}},
 	}
-	out := streamCapableModelNDJSON(context.Background(), rec, "sys", req, NewMCPClient(), "qwen3.5:9b", slog.Default())
+	out := streamCapableModelNDJSON(context.Background(), rec, "sys", req, NewMCPClient(), "qwen3.5:9b", slog.Default(), NewChatDepsFromEnv())
 	if out != streamNDJSONOK {
 		t.Fatalf("want streamNDJSONOK after Ollama fallback, got %v", out)
 	}
@@ -250,7 +250,7 @@ func TestStreamOllamaChatToNDJSONOutcome_SecretEmitsOverwrite(t *testing.T) {
 			Role    string `json:"role"`
 			Content string `json:"content"`
 		}{{Role: "user", Content: "hi"}},
-	}, slog.Default())
+	}, slog.Default(), NewChatDepsFromEnv())
 	if out != streamNDJSONOK {
 		t.Fatalf("want streamNDJSONOK, got %v", out)
 	}
@@ -273,7 +273,7 @@ func TestStreamOllamaChatToNDJSONOutcome_EmitsToolCallNDJSON(t *testing.T) {
 			Role    string `json:"role"`
 			Content string `json:"content"`
 		}{{Role: "user", Content: "hi"}},
-	}, slog.Default())
+	}, slog.Default(), NewChatDepsFromEnv())
 	if out != streamNDJSONOK {
 		t.Fatalf("want streamNDJSONOK, got %v", out)
 	}

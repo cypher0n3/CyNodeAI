@@ -17,7 +17,26 @@ import (
 // a different holder has a non-expired lease. When the same holder re-requests with the same lease_id, returns
 // the existing lease (idempotent). When the lease row is missing or expired, creates or updates the row.
 // Per REQ-ORCHES-0145, REQ-ORCHES-0146 and CYNAI.ORCHES.TaskWorkflowLeaseLifecycle.
+//
+//nolint:dupl // same transaction wrapper as CreateTask (intentional shared pattern).
 func (db *DB) AcquireTaskWorkflowLease(ctx context.Context, taskID, leaseID uuid.UUID, holderID string, expiresAt time.Time) (*models.TaskWorkflowLease, error) {
+	var lease *models.TaskWorkflowLease
+	err := db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		d := &DB{db: tx, workerBearerKey: db.workerBearerKey}
+		l, err := d.acquireTaskWorkflowLeaseCore(ctx, taskID, leaseID, holderID, expiresAt)
+		if err != nil {
+			return err
+		}
+		lease = l
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return lease, nil
+}
+
+func (db *DB) acquireTaskWorkflowLeaseCore(ctx context.Context, taskID, leaseID uuid.UUID, holderID string, expiresAt time.Time) (*models.TaskWorkflowLease, error) {
 	now := time.Now().UTC()
 	var record TaskWorkflowLeaseRecord
 	err := db.db.WithContext(ctx).Where("task_id = ?", taskID).First(&record).Error
@@ -91,6 +110,13 @@ func (db *DB) GetWorkflowCheckpoint(ctx context.Context, taskID uuid.UUID) (*mod
 
 // UpsertWorkflowCheckpoint inserts or updates the single checkpoint row for the task (unique on task_id).
 func (db *DB) UpsertWorkflowCheckpoint(ctx context.Context, cp *models.WorkflowCheckpoint) error {
+	return db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		d := &DB{db: tx, workerBearerKey: db.workerBearerKey}
+		return d.upsertWorkflowCheckpointCore(ctx, cp)
+	})
+}
+
+func (db *DB) upsertWorkflowCheckpointCore(ctx context.Context, cp *models.WorkflowCheckpoint) error {
 	now := time.Now().UTC()
 	var existing WorkflowCheckpointRecord
 	err := db.db.WithContext(ctx).Where("task_id = ?", cp.TaskID).First(&existing).Error

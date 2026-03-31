@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
@@ -57,6 +59,23 @@ func (db *DB) ListSystemSettings(ctx context.Context, keyPrefix string, limit in
 
 // CreateSystemSetting inserts a row. Returns ErrExists if key is already present.
 func (db *DB) CreateSystemSetting(ctx context.Context, key, value, valueType string, reason, updatedBy *string) (*models.SystemSetting, error) {
+	var out *models.SystemSetting
+	err := db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		d := &DB{db: tx, workerBearerKey: db.workerBearerKey}
+		s, err := d.createSystemSettingCore(ctx, key, value, valueType, reason, updatedBy)
+		if err != nil {
+			return err
+		}
+		out = s
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (db *DB) createSystemSettingCore(ctx context.Context, key, value, valueType string, reason, updatedBy *string) (*models.SystemSetting, error) {
 	_, err := db.GetSystemSetting(ctx, key)
 	if err == nil {
 		return nil, ErrExists
@@ -82,6 +101,23 @@ func (db *DB) CreateSystemSetting(ctx context.Context, key, value, valueType str
 
 // UpdateSystemSetting updates a row. Returns ErrNotFound, ErrConflict when expected_version mismatches.
 func (db *DB) UpdateSystemSetting(ctx context.Context, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.SystemSetting, error) {
+	var out *models.SystemSetting
+	err := db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		d := &DB{db: tx, workerBearerKey: db.workerBearerKey}
+		s, err := d.updateSystemSettingCore(ctx, key, value, valueType, expectedVersion, reason, updatedBy)
+		if err != nil {
+			return err
+		}
+		out = s
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (db *DB) updateSystemSettingCore(ctx context.Context, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.SystemSetting, error) {
 	ent, err := db.GetSystemSetting(ctx, key)
 	if err != nil {
 		return nil, err

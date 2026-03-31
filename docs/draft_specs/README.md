@@ -11,7 +11,8 @@ Draft specs are incubators: they allow exploration of design options, new featur
 - **`README.md` (this file):** Navigation and conventions for the whole tree.
 - **Root (`docs/draft_specs/*.md`):** Active proposals and designs.
   Filenames prefixed with `NNN_` use **increments of 10** (e.g. `010_`, `020_`, `030_`) so new drafts can be inserted between existing numbers without renumbering the whole queue.
-    The number indicates **integration priority** (lower = integrate into canonical docs sooner). `README.md` in this directory is not numbered.
+    The number indicates **integration priority** (lower = integrate into canonical docs sooner).
+    `README.md` in this directory is not numbered.
 - **[`integrated/`](integrated/README.md):** Drafts whose normative content already lives in `docs/tech_specs/` (and requirements as applicable); kept for history only.
 - **[`partial/`](partial/):** Drafts that are **partly** reflected in canonical docs; promotion or merge work remains.
 

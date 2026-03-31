@@ -62,7 +62,8 @@ Gaps identified against requirements and technical specifications.
 - **Bug 4 partially addressed.** `handleEnterKey` (`model.go:598`) allows slash and shell commands during streaming.
   The full queue/Ctrl+Enter spec is still unimplemented.
 
-- **REQ-CLIENT-0221 partial.** `secretutil.RunWithSecret` protects thinking and tool-call parts, but `m.streamBuf` (visible-text buffer) is not wrapped.
+- **REQ-CLIENT-0221 partial.**
+  `secretutil.RunWithSecret` protects thinking and tool-call parts, but `m.streamBuf` (visible-text buffer) is not wrapped.
 
 ## 3 Architectural Issues
 
@@ -172,7 +173,8 @@ Vulnerabilities organized by severity level.
 
 ## 7 Maintainability Issues
 
-- **Inconsistent async patterns.** `/thread list` and `/thread rename` use proper async `tea.Cmd`; `/thread new` and `/thread switch` block synchronously.
+- **Inconsistent async patterns.**
+  `/thread list` and `/thread rename` use proper async `tea.Cmd`; `/thread new` and `/thread switch` block synchronously.
 
 - **Duplicated URL construction** across 8+ client methods that bypass `doRequest`.
 

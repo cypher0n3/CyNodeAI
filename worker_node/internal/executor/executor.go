@@ -78,7 +78,12 @@ func (e *Executor) Ready(ctx context.Context) (ready bool, reason string) {
 // RunJob executes a sandbox job and returns the result.
 // workspaceDir is the host path for the per-task workspace; if non-empty it is mounted at /workspace
 // and task context env vars are set. See docs/tech_specs/sandbox_container.md.
+//
+//nolint:gocyclo // dispatch branches: direct, inference pod, SBA, container runtime
 func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest, workspaceDir string) (*workerapi.RunJobResponse, error) {
+	if err := workerapi.ValidateRequest(req); err != nil {
+		return nil, err
+	}
 	startedAt := time.Now().UTC()
 
 	resp := &workerapi.RunJobResponse{

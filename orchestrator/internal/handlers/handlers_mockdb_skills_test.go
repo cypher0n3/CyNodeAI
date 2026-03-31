@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -87,6 +88,48 @@ func TestSkillsHandler_List_WithScopeAndOwner(t *testing.T) {
 	}
 	if out["skills"] == nil {
 		t.Error("expected skills key")
+	}
+}
+
+func TestSkillsHandler_List_InvalidLimit(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	h := NewSkillsHandler(mock, newTestLogger())
+	ctx := context.WithValue(context.Background(), contextKeyUserID, user.ID)
+	req := httptest.NewRequest("GET", "/v1/skills?limit=101", http.NoBody).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	h.List(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("want 400, got %d", rec.Code)
+	}
+}
+
+func TestSkillsHandler_List_PaginationMetadata(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	for i := 0; i < 3; i++ {
+		_, _ = mock.CreateSkill(context.Background(), fmt.Sprintf("skill-%d", i), "# c", "user", &user.ID, false)
+	}
+	h := NewSkillsHandler(mock, newTestLogger())
+	ctx := context.WithValue(context.Background(), contextKeyUserID, user.ID)
+	req := httptest.NewRequest("GET", "/v1/skills?limit=1&offset=0", http.NoBody).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	h.List(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("List: %d", rec.Code)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	tc, _ := out["total_count"].(float64)
+	if tc < 2 {
+		t.Errorf("total_count want >=2, got %v", out["total_count"])
+	}
+	if out["next_cursor"] == nil && out["next_offset"] == nil {
+		t.Errorf("expected next page hints: %+v", out)
 	}
 }
 

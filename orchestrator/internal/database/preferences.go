@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/gormmodel"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
@@ -100,20 +101,61 @@ func (db *DB) effectiveScopesForTask(ctx context.Context, taskID uuid.UUID) ([]p
 	return scopes, nil
 }
 
-// GetEffectivePreferencesForTask computes effective preferences for a task (task > project > user > system; group skipped when no membership data).
-// Returns a map key -> JSON value (parsed). Per user_preferences.md resolution: collect by scope precedence, then fold.
-func (db *DB) GetEffectivePreferencesForTask(ctx context.Context, taskID uuid.UUID) (map[string]interface{}, error) {
-	scopes, err := db.effectiveScopesForTask(ctx, taskID)
-	if err != nil {
-		return nil, err
+func prefScopeMatches(s prefScope, e *models.PreferenceEntry) bool {
+	if e.ScopeType != s.scopeType {
+		return false
 	}
+	if s.scopeID == nil {
+		return e.ScopeID == nil
+	}
+	if e.ScopeID == nil {
+		return false
+	}
+	return *e.ScopeID == *s.scopeID
+}
+
+// listPreferenceEntriesForScopes returns all preference rows for the given scopes in one query (system, user, project, task).
+func (db *DB) listPreferenceEntriesForScopes(ctx context.Context, scopes []prefScope) ([]*models.PreferenceEntry, error) {
+	if len(scopes) == 0 {
+		return nil, nil
+	}
+	var b strings.Builder
+	args := make([]interface{}, 0, len(scopes)*2)
+	for i, s := range scopes {
+		if i > 0 {
+			b.WriteString(" OR ")
+		}
+		if s.scopeID == nil {
+			b.WriteString("(scope_type = ? AND scope_id IS NULL)")
+			args = append(args, s.scopeType)
+		} else {
+			b.WriteString("(scope_type = ? AND scope_id = ?)")
+			args = append(args, s.scopeType, *s.scopeID)
+		}
+	}
+	var records []PreferenceEntryRecord
+	err := db.db.WithContext(ctx).Model(&PreferenceEntryRecord{}).
+		Where(b.String(), args...).
+		Order("key ASC").
+		Find(&records).Error
+	if err != nil {
+		return nil, wrapErr(err, "list preferences for scopes")
+	}
+	out := make([]*models.PreferenceEntry, len(records))
+	for i := range records {
+		out[i] = records[i].ToPreferenceEntry()
+	}
+	return out, nil
+}
+
+// mergePreferenceEntriesByScopeOrder applies scopes in order so later scopes override keys (task > project > user > system).
+func mergePreferenceEntriesByScopeOrder(scopes []prefScope, allEntries []*models.PreferenceEntry) map[string]interface{} {
 	effective := make(map[string]interface{})
 	for _, s := range scopes {
-		entries, _, err := db.ListPreferences(ctx, s.scopeType, s.scopeID, "", MaxPreferenceListLimit, "")
-		if err != nil {
-			return nil, fmt.Errorf("list preferences %s: %w", s.scopeType, err)
-		}
-		for _, e := range entries {
+		for _, e := range allEntries {
+			if !prefScopeMatches(s, e) {
+				continue
+			}
 			var v interface{}
 			if e.Value != nil && *e.Value != "" {
 				if err := json.Unmarshal([]byte(*e.Value), &v); err != nil {
@@ -123,12 +165,43 @@ func (db *DB) GetEffectivePreferencesForTask(ctx context.Context, taskID uuid.UU
 			effective[e.Key] = v
 		}
 	}
-	return effective, nil
+	return effective
+}
+
+// GetEffectivePreferencesForTask computes effective preferences for a task (task > project > user > system; group skipped when no membership data).
+// Returns a map key -> JSON value (parsed). Per user_preferences.md resolution: collect by scope precedence, then fold.
+func (db *DB) GetEffectivePreferencesForTask(ctx context.Context, taskID uuid.UUID) (map[string]interface{}, error) {
+	scopes, err := db.effectiveScopesForTask(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	allEntries, err := db.listPreferenceEntriesForScopes(ctx, scopes)
+	if err != nil {
+		return nil, err
+	}
+	return mergePreferenceEntriesByScopeOrder(scopes, allEntries), nil
 }
 
 // CreatePreference creates a preference entry. Returns ErrExists if (scope_type, scope_id, key) already exists.
 // value should be JSON-encoded; valueType is e.g. string, number, boolean, object, array. Per mcp_tools/preference_tools.md.
 func (db *DB) CreatePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, reason, updatedBy *string) (*models.PreferenceEntry, error) {
+	var out *models.PreferenceEntry
+	err := db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		d := &DB{db: tx, workerBearerKey: db.workerBearerKey}
+		ent, err := d.createPreferenceCore(ctx, scopeType, scopeID, key, value, valueType, reason, updatedBy)
+		if err != nil {
+			return err
+		}
+		out = ent
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (db *DB) createPreferenceCore(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, reason, updatedBy *string) (*models.PreferenceEntry, error) {
 	existing, err := db.GetPreference(ctx, scopeType, scopeID, key)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return nil, err
@@ -166,6 +239,23 @@ func (db *DB) CreatePreference(ctx context.Context, scopeType string, scopeID *u
 
 // UpdatePreference updates a preference entry. Returns ErrNotFound if not found, ErrConflict if expected_version is set and does not match.
 func (db *DB) UpdatePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.PreferenceEntry, error) {
+	var out *models.PreferenceEntry
+	err := db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		d := &DB{db: tx, workerBearerKey: db.workerBearerKey}
+		ent, err := d.updatePreferenceCore(ctx, scopeType, scopeID, key, value, valueType, expectedVersion, reason, updatedBy)
+		if err != nil {
+			return err
+		}
+		out = ent
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (db *DB) updatePreferenceCore(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.PreferenceEntry, error) {
 	ent, err := db.GetPreference(ctx, scopeType, scopeID, key)
 	if err != nil {
 		return nil, err

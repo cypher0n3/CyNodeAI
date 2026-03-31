@@ -3,6 +3,7 @@ package workerapi
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
 )
@@ -107,8 +108,25 @@ func ValidateRequest(req *RunJobRequest) error {
 	if req == nil {
 		return &RequestValidationError{Reason: "request is nil"}
 	}
+	if req.Version != 1 {
+		return &RequestValidationError{Reason: "version must be 1"}
+	}
+	if strings.TrimSpace(req.TaskID) == "" {
+		return &RequestValidationError{Reason: "task_id is required"}
+	}
+	if strings.TrimSpace(req.JobID) == "" {
+		return &RequestValidationError{Reason: "job_id is required"}
+	}
 	if req.Sandbox.JobSpecJSON == "" && len(req.Sandbox.Command) == 0 {
 		return &RequestValidationError{Reason: "sandbox.command is required when job_spec_json is not set"}
+	}
+	if req.Sandbox.TimeoutSeconds < 0 {
+		return &RequestValidationError{Reason: "sandbox.timeout_seconds must be non-negative"}
+	}
+	switch strings.ToLower(strings.TrimSpace(req.Sandbox.NetworkPolicy)) {
+	case "", "none", "restricted", "allow":
+	default:
+		return &RequestValidationError{Reason: "sandbox.network_policy must be empty, none, restricted, or allow"}
 	}
 	return nil
 }

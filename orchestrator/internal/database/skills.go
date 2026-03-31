@@ -17,6 +17,13 @@ var DefaultSkillID = uuid.MustParse("00000000-0000-4000-8000-000000000001")
 
 const scopeUser = "user"
 
+const (
+	// DefaultSkillPageLimit is the default page size for ListSkillsForUser when limit <= 0.
+	DefaultSkillPageLimit = 50
+	// MaxSkillPageLimit is the maximum page size for ListSkillsForUser.
+	MaxSkillPageLimit = 100
+)
+
 // CreateSkill stores a new skill and returns it. Scope must be user|group|project|global; default user. OwnerID required for non-system skills.
 func (db *DB) CreateSkill(ctx context.Context, name, content, scope string, ownerID *uuid.UUID, isSystem bool) (*models.Skill, error) {
 	if scope == "" {
@@ -52,26 +59,39 @@ func (db *DB) GetSkillByID(ctx context.Context, id uuid.UUID) (*models.Skill, er
 	return record.ToSkill(), nil
 }
 
-// ListSkillsForUser returns skills visible to the user: own skills (owner_id = userID) plus system default. scopeFilter and ownerFilter optional (empty = no filter).
-func (db *DB) ListSkillsForUser(ctx context.Context, userID uuid.UUID, scopeFilter, ownerFilter string) ([]*models.Skill, error) {
-	q := db.db.WithContext(ctx).Model(&SkillRecord{}).
+// ListSkillsForUser returns one page of skills visible to the user: own skills (owner_id = userID) plus system default.
+// scopeFilter and ownerFilter optional (empty = no filter). limit<=0 uses DefaultSkillPageLimit; limit is clamped to MaxSkillPageLimit.
+func (db *DB) ListSkillsForUser(ctx context.Context, userID uuid.UUID, scopeFilter, ownerFilter string, limit, offset int) ([]*models.Skill, int64, error) {
+	base := db.db.WithContext(ctx).Model(&SkillRecord{}).
 		Where("is_system = ? OR owner_id = ?", true, userID)
 	if scopeFilter != "" {
-		q = q.Where("scope = ?", scopeFilter)
+		base = base.Where("scope = ?", scopeFilter)
 	}
 	if ownerFilter != "" {
-		// owner filter by owner_id: parse as UUID or match handle would need join; for MVP filter by owner_id UUID string
-		q = q.Where("owner_id::text = ?", ownerFilter)
+		base = base.Where("owner_id::text = ?", ownerFilter)
+	}
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, wrapErr(err, "count skills for user")
+	}
+	if limit <= 0 {
+		limit = DefaultSkillPageLimit
+	}
+	if limit > MaxSkillPageLimit {
+		limit = MaxSkillPageLimit
+	}
+	if offset < 0 {
+		offset = 0
 	}
 	var records []SkillRecord
-	if err := q.Order("updated_at DESC").Find(&records).Error; err != nil {
-		return nil, wrapErr(err, "list skills for user")
+	if err := base.Order("updated_at DESC").Limit(limit).Offset(offset).Find(&records).Error; err != nil {
+		return nil, 0, wrapErr(err, "list skills for user")
 	}
 	out := make([]*models.Skill, len(records))
 	for i := range records {
 		out[i] = records[i].ToSkill()
 	}
-	return out, nil
+	return out, total, nil
 }
 
 // UpdateSkill updates name, content, and/or scope by id. Nil pointer means do not update. Returns updated skill or ErrNotFound.

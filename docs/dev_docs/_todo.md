@@ -9,19 +9,19 @@ These must be addressed before any production deployment:
 1. **Fix authorization fail-open.**
    MCP gateway must reject no-token requests.
    Implement PM and PA allowlists.
-   Fix system skill mutation guard. ([Report 1](2026-03-29_review_report_1_orchestrator.md))
-2. **Replace all `!=` token comparisons** with `subtle.ConstantTimeCompare` across orchestrator, worker node, and cynork. ([Report 1](2026-03-29_review_report_1_orchestrator.md), [Report 2](2026-03-29_review_report_2_worker_node.md), [Report 4](2026-03-29_review_report_4_cynork.md))
-3. **Add startup validation** rejecting insecure default secrets outside dev mode. ([Report 1](2026-03-29_review_report_1_orchestrator.md))
-4. **Implement `planning_state`** on TaskBase (REQ-ORCHES-0176/0177/0178). ([Report 1](2026-03-29_review_report_1_orchestrator.md))
-5. **Fix pod network isolation** for sandbox containers (REQ-WORKER-0174). ([Report 2](2026-03-29_review_report_2_worker_node.md))
-6. **Fix container name matching** in `startOneManagedService`. ([Report 2](2026-03-29_review_report_2_worker_node.md))
-7. **Add `Close()` to securestore** that zeros key material. ([Report 2](2026-03-29_review_report_2_worker_node.md))
-8. **Implement PMA keep-warm** (REQ-PMAGNT-0129), **secret scan** (REQ-PMAGNT-0125), and **overwrite events** (REQ-PMAGNT-0124). ([Report 3](2026-03-29_review_report_3_agents.md))
-9. **Fix SBA prompt construction** (REQ-SBAGNT-0113): add persona, skills, preferences; fix context ordering. ([Report 3](2026-03-29_review_report_3_agents.md))
-10. **Fix PMA WriteTimeout** (120s < inference timeout 300s). ([Report 3](2026-03-29_review_report_3_agents.md))
-11. **Fix cynork `runEnsureThread` data race.** ([Report 4](2026-03-29_review_report_4_cynork.md))
-12. **Change `RunJobResponse.ExitCode`** from `int` to `*int`. ([Report 5](2026-03-29_review_report_5_shared_libs.md))
-13. **Add GitHub Actions CI workflow.** ([Report 6](2026-03-29_review_report_6_testing.md))
+   Fix system skill mutation guard. ([Report 1](old/2026-03-29_review_report_1_orchestrator.md))
+2. **Replace all `!=` token comparisons** with `subtle.ConstantTimeCompare` across orchestrator, worker node, and cynork. ([Report 1](old/2026-03-29_review_report_1_orchestrator.md), [Report 2](old/2026-03-29_review_report_2_worker_node.md), [Report 4](old/2026-03-29_review_report_4_cynork.md))
+3. **Add startup validation** rejecting insecure default secrets outside dev mode. ([Report 1](old/2026-03-29_review_report_1_orchestrator.md))
+4. **Implement `planning_state`** on TaskBase (REQ-ORCHES-0176/0177/0178). ([Report 1](old/2026-03-29_review_report_1_orchestrator.md))
+5. **Fix pod network isolation** for sandbox containers (REQ-WORKER-0174). ([Report 2](old/2026-03-29_review_report_2_worker_node.md))
+6. **Fix container name matching** in `startOneManagedService`. ([Report 2](old/2026-03-29_review_report_2_worker_node.md))
+7. **Add `Close()` to securestore** that zeros key material. ([Report 2](old/2026-03-29_review_report_2_worker_node.md))
+8. **Implement PMA keep-warm** (REQ-PMAGNT-0129), **secret scan** (REQ-PMAGNT-0125), and **overwrite events** (REQ-PMAGNT-0124). ([Report 3](old/2026-03-29_review_report_3_agents.md))
+9. **Fix SBA prompt construction** (REQ-SBAGNT-0113): add persona, skills, preferences; fix context ordering. ([Report 3](old/2026-03-29_review_report_3_agents.md))
+10. **Fix PMA WriteTimeout** (120s < inference timeout 300s). ([Report 3](old/2026-03-29_review_report_3_agents.md))
+11. **Fix cynork `runEnsureThread` data race.** ([Report 4](old/2026-03-29_review_report_4_cynork.md))
+12. **Change `RunJobResponse.ExitCode`** from `int` to `*int`. ([Report 5](old/2026-03-29_review_report_5_shared_libs.md))
+13. **Add GitHub Actions CI workflow.** ([Report 6](old/2026-03-29_review_report_6_testing.md))
 
 Plan: [_plan_001_immediate.md](_plan_001_immediate.md)
 
@@ -44,36 +44,38 @@ Plan: [_plan_003_short_term.md](_plan_003_short_term.md)
 
 Address within 1-2 sprints (tracking list retained for context):
 
-1. **Add `http.MaxBytesReader` and `io.LimitReader`** across all modules for unbounded reads. ([Consolidated summary](2026-03-29_review_consolidated_summary.md))
-2. **Add `context.Context`** to all functions performing network I/O without it. ([Report 2](2026-03-29_review_report_2_worker_node.md), [Report 3](2026-03-29_review_report_3_agents.md), [Report 4](2026-03-29_review_report_4_cynork.md))
-3. **Replace `time.Sleep` with context-aware select** in retry loops. ([Report 1](2026-03-29_review_report_1_orchestrator.md))
-4. **Move synchronous network I/O to async `tea.Cmd`** in TUI. ([Report 4](2026-03-29_review_report_4_cynork.md))
-5. **Add auth checks to workflow handlers.** ([Report 1](2026-03-29_review_report_1_orchestrator.md))
-6. **Encrypt `worker_api_bearer_token`** in DB. ([Report 1](2026-03-29_review_report_1_orchestrator.md))
-7. **Add audit logging to internal orchestrator proxy.** ([Report 2](2026-03-29_review_report_2_worker_node.md))
-8. **Close lifecycle response bodies** in SBA. ([Report 3](2026-03-29_review_report_3_agents.md))
+1. **Add `http.MaxBytesReader` and `io.LimitReader`** across all modules for unbounded reads. ([Consolidated summary](old/2026-03-29_review_consolidated_summary.md))
+2. **Add `context.Context`** to all functions performing network I/O without it. ([Report 2](old/2026-03-29_review_report_2_worker_node.md), [Report 3](old/2026-03-29_review_report_3_agents.md), [Report 4](old/2026-03-29_review_report_4_cynork.md))
+3. **Replace `time.Sleep` with context-aware select** in retry loops. ([Report 1](old/2026-03-29_review_report_1_orchestrator.md))
+4. **Move synchronous network I/O to async `tea.Cmd`** in TUI. ([Report 4](old/2026-03-29_review_report_4_cynork.md))
+5. **Add auth checks to workflow handlers.** ([Report 1](old/2026-03-29_review_report_1_orchestrator.md))
+6. **Encrypt `worker_api_bearer_token`** in DB. ([Report 1](old/2026-03-29_review_report_1_orchestrator.md))
+7. **Add audit logging to internal orchestrator proxy.** ([Report 2](old/2026-03-29_review_report_2_worker_node.md))
+8. **Close lifecycle response bodies** in SBA. ([Report 3](old/2026-03-29_review_report_3_agents.md))
 9. **Set default HTTP client timeout** in cynork.
-   Make `Client.Token`/`BaseURL` unexported with synchronized accessors. ([Report 4](2026-03-29_review_report_4_cynork.md))
-10. **Extract SBA result status constants** and create shared status mapping. ([Report 5](2026-03-29_review_report_5_shared_libs.md))
-11. **Add BDD feature files** for ACCESS, AGENTS, MCPGAT, MCPTOO domains. ([Report 6](2026-03-29_review_report_6_testing.md))
-12. **Add E2E to CI** (`just e2e -tags no_inference`). ([Report 6](2026-03-29_review_report_6_testing.md))
+   Make `Client.Token`/`BaseURL` unexported with synchronized accessors. ([Report 4](old/2026-03-29_review_report_4_cynork.md))
+10. **Extract SBA result status constants** and create shared status mapping. ([Report 5](old/2026-03-29_review_report_5_shared_libs.md))
+11. **Add BDD feature files** for ACCESS, AGENTS, MCPGAT, MCPTOO domains. ([Report 6](old/2026-03-29_review_report_6_testing.md))
+12. **Add E2E to CI** (`just e2e -tags no_inference`). ([Report 6](old/2026-03-29_review_report_6_testing.md))
 
 ## 4 Planned (Medium-Severity Improvements)
 
 Plan: [_plan_004_planned.md](_plan_004_planned.md)
 
+**Status (2026-03-30):** Completed; see [_plan_004_final_report.md](_plan_004_final_report.md).
+
 Address within the next release cycle:
 
-1. **Wrap database operations in transactions** (lease, checkpoint, task create, preference upsert). ([Report 1](2026-03-29_review_report_1_orchestrator.md))
-2. **Split `Store` interface** into focused sub-interfaces. ([Report 1](2026-03-29_review_report_1_orchestrator.md))
-3. **Add pagination** to unbounded queries. ([Report 1](2026-03-29_review_report_1_orchestrator.md), [Report 2](2026-03-29_review_report_2_worker_node.md))
-4. **Batch N+1 queries.** ([Report 1](2026-03-29_review_report_1_orchestrator.md))
-5. **Add AAD to GCM** and HKDF to PQ path in secure store. ([Report 2](2026-03-29_review_report_2_worker_node.md))
-6. **Add GORM index tags** on telemetry query-hot columns. ([Report 2](2026-03-29_review_report_2_worker_node.md))
-7. **Inject dependencies into PMA handler** (eliminate per-request `os.Getenv`/`NewMCPClient`). ([Report 3](2026-03-29_review_report_3_agents.md))
-8. **Unify TUI dual scrollback model.** ([Report 4](2026-03-29_review_report_4_cynork.md))
-9. **Add validation** to `workerapi.RunJobRequest` and `nodepayloads`. ([Report 5](2026-03-29_review_report_5_shared_libs.md))
-10. **Merge BDD coverage into Go profiles** or document as separate metric. ([Report 6](2026-03-29_review_report_6_testing.md))
+1. **Wrap database operations in transactions** (lease, checkpoint, task create, preference upsert). ([Report 1](old/2026-03-29_review_report_1_orchestrator.md))
+2. **Split `Store` interface** into focused sub-interfaces. ([Report 1](old/2026-03-29_review_report_1_orchestrator.md))
+3. **Add pagination** to unbounded queries. ([Report 1](old/2026-03-29_review_report_1_orchestrator.md), [Report 2](old/2026-03-29_review_report_2_worker_node.md))
+4. **Batch N+1 queries.** ([Report 1](old/2026-03-29_review_report_1_orchestrator.md))
+5. **Add AAD to GCM** and HKDF to PQ path in secure store. ([Report 2](old/2026-03-29_review_report_2_worker_node.md))
+6. **Add GORM index tags** on telemetry query-hot columns. ([Report 2](old/2026-03-29_review_report_2_worker_node.md))
+7. **Inject dependencies into PMA handler** (eliminate per-request `os.Getenv`/`NewMCPClient`). ([Report 3](old/2026-03-29_review_report_3_agents.md))
+8. **Unify TUI dual scrollback model.** ([Report 4](old/2026-03-29_review_report_4_cynork.md))
+9. **Add validation** to `workerapi.RunJobRequest` and `nodepayloads`. ([Report 5](old/2026-03-29_review_report_5_shared_libs.md))
+10. **Merge BDD coverage into Go profiles** or document as separate metric. ([Report 6](old/2026-03-29_review_report_6_testing.md))
 
 ## 5 Per-Session-Binding PMA Provisioning
 
@@ -90,7 +92,7 @@ Normative refs (requirements):
 
 Related tech specs: [CYNAI.ORCHES.PmaInstancePerSessionBinding](../tech_specs/orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding), [CYNAI.ORCHES.PmaGreedyProvisioningOnLogin](../tech_specs/orchestrator.md#spec-cynai-orches-pmagreedyprovisioningonlogin).
 
-Note: Bootstrap/readiness vs per-binding instances -- see [REQ-ORCHES-0150](../requirements/orches.md#req-orches-0150) and **Align PMA startup** in [section 7](#7-longer-term-maintenance-and-debt). ([Report 1](2026-03-29_review_report_1_orchestrator.md), [Report 2](2026-03-29_review_report_2_worker_node.md))
+Note: Bootstrap/readiness vs per-binding instances -- see [REQ-ORCHES-0150](../requirements/orches.md#req-orches-0150) and **Align PMA startup** in [section 7](#7-longer-term-maintenance-and-debt). ([Report 1](old/2026-03-29_review_report_1_orchestrator.md), [Report 2](old/2026-03-29_review_report_2_worker_node.md))
 
 ### 5.1 Orchestrator -- Session Binding Model
 
@@ -133,9 +135,9 @@ Plan: [_plan_006_phase2_mcp.md](_plan_006_phase2_mcp.md)
 
 Plan: [_plan_007_longer_term.md](_plan_007_longer_term.md)
 
-1. **Adopt versioned migrations** to replace AutoMigrate. ([Report 1](2026-03-29_review_report_1_orchestrator.md), [Report 2](2026-03-29_review_report_2_worker_node.md))
-2. **Align PMA startup** with worker-instruction model (REQ-ORCHES-0150). ([Report 1](2026-03-29_review_report_1_orchestrator.md))
-3. **Implement continuous PMA monitoring** (REQ-ORCHES-0129). ([Report 1](2026-03-29_review_report_1_orchestrator.md))
-4. **Extract centralized config package** for worker node. ([Report 2](2026-03-29_review_report_2_worker_node.md))
-5. **Replace global mutable test hooks** with dependency injection across all modules. ([Consolidated summary](2026-03-29_review_consolidated_summary.md))
-6. **Add load/performance testing** and chaos/failure E2E scenarios. ([Report 6](2026-03-29_review_report_6_testing.md))
+1. **Adopt versioned migrations** to replace AutoMigrate. ([Report 1](old/2026-03-29_review_report_1_orchestrator.md), [Report 2](old/2026-03-29_review_report_2_worker_node.md))
+2. **Align PMA startup** with worker-instruction model (REQ-ORCHES-0150). ([Report 1](old/2026-03-29_review_report_1_orchestrator.md))
+3. **Implement continuous PMA monitoring** (REQ-ORCHES-0129). ([Report 1](old/2026-03-29_review_report_1_orchestrator.md))
+4. **Extract centralized config package** for worker node. ([Report 2](old/2026-03-29_review_report_2_worker_node.md))
+5. **Replace global mutable test hooks** with dependency injection across all modules. ([Consolidated summary](old/2026-03-29_review_consolidated_summary.md))
+6. **Add load/performance testing** and chaos/failure E2E scenarios. ([Report 6](old/2026-03-29_review_report_6_testing.md))

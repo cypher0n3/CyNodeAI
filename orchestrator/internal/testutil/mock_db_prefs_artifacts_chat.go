@@ -353,17 +353,40 @@ func (m *MockDB) AppendChatMessage(_ context.Context, threadID uuid.UUID, role, 
 	})
 }
 
-// ListChatMessages returns stored messages for the thread, oldest-first, up to limit (0 = all).
-func (m *MockDB) ListChatMessages(_ context.Context, threadID uuid.UUID, limit int) ([]*models.ChatMessage, error) {
-	return runWithLock(m, false, func() ([]*models.ChatMessage, error) {
+// ListChatMessages returns one page of messages for the thread, oldest-first, and the total count.
+func (m *MockDB) ListChatMessages(_ context.Context, threadID uuid.UUID, limit, offset int) ([]*models.ChatMessage, int64, error) {
+	type out struct {
+		msgs  []*models.ChatMessage
+		total int64
+	}
+	res, err := runWithLock(m, false, func() (out, error) {
 		msgs := m.ChatMessages[threadID]
-		if limit > 0 && len(msgs) > limit {
-			msgs = msgs[len(msgs)-limit:]
+		total := int64(len(msgs))
+		if limit <= 0 {
+			limit = database.DefaultChatMessagePageLimit
 		}
-		out := make([]*models.ChatMessage, len(msgs))
-		copy(out, msgs)
-		return out, nil
+		if limit > database.MaxChatMessagePageLimit {
+			limit = database.MaxChatMessagePageLimit
+		}
+		if offset < 0 {
+			offset = 0
+		}
+		if offset >= len(msgs) {
+			return out{msgs: nil, total: total}, nil
+		}
+		end := offset + limit
+		if end > len(msgs) {
+			end = len(msgs)
+		}
+		slice := msgs[offset:end]
+		cp := make([]*models.ChatMessage, len(slice))
+		copy(cp, slice)
+		return out{msgs: cp, total: total}, nil
 	})
+	if err != nil {
+		return nil, 0, err
+	}
+	return res.msgs, res.total, nil
 }
 
 // CreateChatAuditLog writes a chat audit log entry (no-op storage for mock).
@@ -405,13 +428,20 @@ func (m *MockDB) ListChatThreads(_ context.Context, userID uuid.UUID, projectID 
 	return runWithLock(m, false, func() ([]*models.ChatThread, error) {
 		list := m.filterThreadsByUserAndProject(userID, projectID)
 		sort.Slice(list, func(i, j int) bool { return list[i].UpdatedAt.After(list[j].UpdatedAt) })
+		if limit <= 0 {
+			limit = 20
+		}
+		if limit > 100 {
+			limit = 100
+		}
+		if offset < 0 {
+			offset = 0
+		}
 		if offset >= len(list) {
 			return nil, nil
 		}
-		if offset > 0 {
-			list = list[offset:]
-		}
-		if limit > 0 && len(list) > limit {
+		list = list[offset:]
+		if len(list) > limit {
 			list = list[:limit]
 		}
 		return list, nil
@@ -486,24 +516,54 @@ func (m *MockDB) GetSkillByID(_ context.Context, id uuid.UUID) (*models.Skill, e
 	return getByKeyLocked(m, m.Skills, id)
 }
 
-// ListSkillsForUser returns skills visible to user (owner_id = userID or is_system).
-func (m *MockDB) ListSkillsForUser(_ context.Context, userID uuid.UUID, scopeFilter, ownerFilter string) ([]*models.Skill, error) {
+// ListSkillsForUser returns one page of skills visible to user (owner_id = userID or is_system).
+//
+//nolint:gocognit // mirrors DB filtering branches for mock parity.
+func (m *MockDB) ListSkillsForUser(_ context.Context, userID uuid.UUID, scopeFilter, ownerFilter string, limit, offset int) ([]*models.Skill, int64, error) {
 	if m.ListSkillsForUserErr != nil {
-		return nil, m.ListSkillsForUserErr
+		return nil, 0, m.ListSkillsForUserErr
 	}
-	return runWithLock(m, false, func() ([]*models.Skill, error) {
-		var out []*models.Skill
+	type out struct {
+		skills []*models.Skill
+		total  int64
+	}
+	res, err := runWithLock(m, false, func() (out, error) {
+		var list []*models.Skill
 		for _, s := range m.Skills {
-			if mockSkillVisible(s, userID, scopeFilter) {
-				out = append(out, s)
+			if mockSkillVisible(s, userID, scopeFilter, ownerFilter) {
+				list = append(list, s)
 			}
 		}
-		return out, nil
+		total := int64(len(list))
+		if limit <= 0 {
+			limit = database.DefaultSkillPageLimit
+		}
+		if limit > database.MaxSkillPageLimit {
+			limit = database.MaxSkillPageLimit
+		}
+		if offset < 0 {
+			offset = 0
+		}
+		if offset >= len(list) {
+			return out{skills: nil, total: total}, nil
+		}
+		end := offset + limit
+		if end > len(list) {
+			end = len(list)
+		}
+		return out{skills: list[offset:end], total: total}, nil
 	})
+	if err != nil {
+		return nil, 0, err
+	}
+	return res.skills, res.total, nil
 }
 
-func mockSkillVisible(s *models.Skill, userID uuid.UUID, scopeFilter string) bool {
+func mockSkillVisible(s *models.Skill, userID uuid.UUID, scopeFilter, ownerFilter string) bool {
 	if scopeFilter != "" && s.Scope != scopeFilter {
+		return false
+	}
+	if ownerFilter != "" && (s.OwnerID == nil || s.OwnerID.String() != ownerFilter) {
 		return false
 	}
 	if s.IsSystem {
@@ -640,7 +700,12 @@ func (m *MockDB) ReleaseTaskWorkflowLease(_ context.Context, taskID, leaseID uui
 }
 
 func (m *MockDB) GetTaskWorkflowLease(_ context.Context, taskID uuid.UUID) (*models.TaskWorkflowLease, error) {
-	return getByKeyLocked(m, m.TaskWorkflowLeases, taskID)
+	return runWithLock(m, false, func() (*models.TaskWorkflowLease, error) {
+		if m.GetTaskWorkflowLeaseErr != nil {
+			return nil, m.GetTaskWorkflowLeaseErr
+		}
+		return getByKey(m.TaskWorkflowLeases, taskID)
+	})
 }
 
 func (m *MockDB) GetWorkflowCheckpoint(_ context.Context, taskID uuid.UUID) (*models.WorkflowCheckpoint, error) {

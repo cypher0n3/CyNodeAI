@@ -919,8 +919,8 @@ func TestWaitForInferencePath_ContextCanceled(t *testing.T) {
 
 // TestWaitForInferencePath_NodeAvailable covers waitForInferencePath returning true when store returns a node.
 func TestWaitForInferencePath_NodeAvailable(t *testing.T) {
-	testPMAPollInterval = 1 * time.Millisecond
-	defer func() { testPMAPollInterval = 0 }()
+	testPMAPollIntervalNs.Store(int64(time.Millisecond))
+	defer testPMAPollIntervalNs.Store(0)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	mockDB := testutil.NewMockDB()
@@ -938,8 +938,8 @@ func TestWaitForInferencePath_NodeAvailable(t *testing.T) {
 
 // TestWaitForInferencePath_ListFailsThenNode covers the error path and then success.
 func TestWaitForInferencePath_ListFailsThenNode(t *testing.T) {
-	testPMAPollInterval = 1 * time.Millisecond
-	defer func() { testPMAPollInterval = 0 }()
+	testPMAPollIntervalNs.Store(int64(time.Millisecond))
+	defer testPMAPollIntervalNs.Store(0)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	mockDB := newListDispatchableNodesFlakyStore()
@@ -964,8 +964,8 @@ func TestRun_PMAStartWhenInferencePathReady_ListNodesFails(t *testing.T) {
 	_ = os.Setenv("LISTEN_ADDR", ":0")
 	defer func() { _ = os.Unsetenv("LISTEN_ADDR") }()
 	testPMAStart = func(*config.OrchestratorConfig, *slog.Logger) (*exec.Cmd, error) { return nil, nil }
-	testPMAPollInterval = 5 * time.Millisecond
-	defer func() { testPMAStart = nil; testPMAPollInterval = 0 }()
+	testPMAPollIntervalNs.Store(int64(5 * time.Millisecond))
+	defer func() { testPMAStart = nil; testPMAPollIntervalNs.Store(0) }()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cfg := config.LoadOrchestratorConfig()

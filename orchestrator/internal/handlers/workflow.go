@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -15,12 +16,12 @@ import (
 
 // WorkflowHandler handles workflow start/resume/checkpoint/release (REQ-ORCHES-0144--0147).
 type WorkflowHandler struct {
-	db     database.Store
+	db     database.WorkflowHandlerDeps
 	logger *slog.Logger
 }
 
 // NewWorkflowHandler creates a workflow handler.
-func NewWorkflowHandler(db database.Store, logger *slog.Logger) *WorkflowHandler {
+func NewWorkflowHandler(db database.WorkflowHandlerDeps, logger *slog.Logger) *WorkflowHandler {
 	return &WorkflowHandler{db: db, logger: logger}
 }
 
@@ -86,6 +87,8 @@ func (h *WorkflowHandler) startGateDenied(w http.ResponseWriter, r *http.Request
 
 // startAcquireAndRespond acquires the workflow lease and writes the start response or an error.
 // When the lease is already held by the same holder (idempotent re-request), returns 200 with status "already_running" per REQ-ORCHES-0145.
+//
+//nolint:gocognit,gocyclo // lease idempotency, gate denials, and error mapping.
 func (h *WorkflowHandler) startAcquireAndRespond(w http.ResponseWriter, r *http.Request, taskID uuid.UUID, req *StartWorkflowRequest) {
 	ttl := defaultLeaseTTL
 	if req.ExpiresInSec != nil && *req.ExpiresInSec > 0 {
@@ -98,17 +101,27 @@ func (h *WorkflowHandler) startAcquireAndRespond(w http.ResponseWriter, r *http.
 			leaseID = id
 		}
 	}
-	existing, err := h.db.GetTaskWorkflowLease(r.Context(), taskID)
-	if err == nil && existing != nil && existing.HolderID != nil && *existing.HolderID == req.HolderID &&
-		existing.LeaseID == leaseID && existing.ExpiresAt != nil && existing.ExpiresAt.After(time.Now().UTC()) {
-		WriteJSON(w, http.StatusOK, StartWorkflowResponse{
-			RunID:   existing.LeaseID.String(),
-			LeaseID: existing.LeaseID.String(),
-			Status:  "already_running",
-		})
-		return
-	}
-	lease, err := h.db.AcquireTaskWorkflowLease(r.Context(), taskID, leaseID, req.HolderID, expiresAt)
+	var idempotentLease *models.TaskWorkflowLease
+	var startedLease *models.TaskWorkflowLease
+	var hadLeaseRow bool
+	err := h.db.WithTx(r.Context(), func(ctx context.Context, tx database.Store) error {
+		existing, err := tx.GetTaskWorkflowLease(ctx, taskID)
+		if err != nil && !errors.Is(err, database.ErrNotFound) {
+			return err
+		}
+		hadLeaseRow = err == nil && existing != nil
+		if err == nil && existing != nil && existing.HolderID != nil && *existing.HolderID == req.HolderID &&
+			existing.LeaseID == leaseID && existing.ExpiresAt != nil && existing.ExpiresAt.After(time.Now().UTC()) {
+			idempotentLease = existing
+			return nil
+		}
+		lease, err := tx.AcquireTaskWorkflowLease(ctx, taskID, leaseID, req.HolderID, expiresAt)
+		if err != nil {
+			return err
+		}
+		startedLease = lease
+		return nil
+	})
 	if err != nil {
 		if errors.Is(err, database.ErrLeaseHeld) {
 			WriteConflict(w, "lease held by another workflow runner")
@@ -118,10 +131,25 @@ func (h *WorkflowHandler) startAcquireAndRespond(w http.ResponseWriter, r *http.
 		WriteInternalError(w, "failed to acquire lease")
 		return
 	}
+	if idempotentLease != nil {
+		WriteJSON(w, http.StatusOK, StartWorkflowResponse{
+			RunID:   idempotentLease.LeaseID.String(),
+			LeaseID: idempotentLease.LeaseID.String(),
+			Status:  "already_running",
+		})
+		return
+	}
+	status := "started"
+	if req.IdempotencyKey != "" && hadLeaseRow && startedLease != nil &&
+		startedLease.HolderID != nil && *startedLease.HolderID == req.HolderID &&
+		startedLease.LeaseID == leaseID {
+		// Lease row existed before Acquire; Acquire returned idempotent success (REQ-ORCHES-0145).
+		status = "already_running"
+	}
 	WriteJSON(w, http.StatusOK, StartWorkflowResponse{
-		RunID:   lease.LeaseID.String(),
-		LeaseID: lease.LeaseID.String(),
-		Status:  "started",
+		RunID:   startedLease.LeaseID.String(),
+		LeaseID: startedLease.LeaseID.String(),
+		Status:  status,
 	})
 }
 

@@ -115,6 +115,10 @@ type TaskResultResponse struct {
 	Status        string        `json:"status"`
 	PlanningState string        `json:"planning_state,omitempty"`
 	Jobs          []JobResponse `json:"jobs"`
+	TotalCount    int           `json:"total_count,omitempty"`
+	NextOffset    *int          `json:"next_offset,omitempty"`
+	// NextCursor is always present; empty when there is no further page (same convention as ListTasksResponse).
+	NextCursor string `json:"next_cursor"`
 }
 
 // JobResponse is one job in a task result.
@@ -128,9 +132,12 @@ type JobResponse struct {
 
 // TaskLogsResponse is the body of GET /v1/tasks/{id}/logs.
 type TaskLogsResponse struct {
-	TaskID string `json:"task_id"`
-	Stdout string `json:"stdout"`
-	Stderr string `json:"stderr"`
+	TaskID     string `json:"task_id"`
+	Stdout     string `json:"stdout"`
+	Stderr     string `json:"stderr"`
+	TotalCount int    `json:"total_count,omitempty"`
+	NextOffset *int   `json:"next_offset,omitempty"`
+	NextCursor string `json:"next_cursor"`
 }
 
 // --- Chat (OpenAI-compatible) ---

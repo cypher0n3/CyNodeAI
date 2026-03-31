@@ -43,11 +43,11 @@ Completed plans are listed for context; outstanding plans feed tasks in this doc
   - [2026-03-14_plan_after_tui_fix.md](2026-03-14_plan_after_tui_fix.md) - Superseded by Tasks 8-10 and 12 completion in this plan (2026-03-29).
   - [2026-03-19_postgres_schema_refactoring_plan.md](2026-03-19_postgres_schema_refactoring_plan.md) - Addressed by Task 11 closure (schema index distributed; see task11 closeout report).
 - **Reports and references (not plans):**
-  - [2026-03-23 E2E single-run report (archived)](../2026-03-29_review_consolidated_summary.md) - E2E failure analysis; symptom buckets guide testing in multiple tasks.
-  - [2026-03-23 E2E vs tech spec review (archived)](../2026-03-29_review_consolidated_summary.md) - Alignment gaps feed Task 3.
+  - [2026-03-23 E2E single-run report (archived)](2026-03-29_review_consolidated_summary.md) - E2E failure analysis; symptom buckets guide testing in multiple tasks.
+  - [2026-03-23 E2E vs tech spec review (archived)](2026-03-29_review_consolidated_summary.md) - Alignment gaps feed Task 3.
   - [2026-03-22_cynork_tui_spec_delta.md](2026-03-22_cynork_tui_spec_delta.md) - TUI implementation vs spec delta; feeds Task 2.
   - [_bugs.md](../_bugs.md) - Bugs 1-2 and 5 fixed/closed; Bugs 3-4 open (documented follow-on UX); fed Tasks 2, 4, and 12 closeout.
-  - [2026-03-29 review consolidated summary](../2026-03-29_review_consolidated_summary.md) (replaces historical incorporation report) - Context only; no direct tasks.
+  - [2026-03-29 review consolidated summary](2026-03-29_review_consolidated_summary.md) (replaces historical incorporation report) - Context only; no direct tasks.
   - [2026-03-15_streaming_specs_implementation_plan.md](2026-03-15_streaming_specs_implementation_plan.md) - Tasks 1-4 complete; remaining work extracted into 2026-03-19 streaming remaining work plan.
 
 ## References
@@ -128,7 +128,8 @@ Source: [_bugs.md](../_bugs.md) Bug 5; post-consolidation regression from [2026-
 
 `just e2e --tags control_plane` runs a `task_id` prereq (`helpers.ensure_e2e_task`) so workflow tests receive `state.TASK_ID`.
 
-**Root cause (2026-03-27):** The shared auth prereq can leave **only** `e2e_gateway_session.json` (tokens) next to the temp config path while **`config.yaml` is missing** (`_ensure_shared_auth_config` does not always create the file). `ensure_e2e_task` used to return immediately when `os.path.isfile(config_path)` was false, so **`cynork task create` never ran**.
+**Root cause (2026-03-27):** The shared auth prereq can leave **only** `e2e_gateway_session.json` (tokens) next to the temp config path while **`config.yaml` is missing** (`_ensure_shared_auth_config` does not always create the file).
+`ensure_e2e_task` used to return immediately when `os.path.isfile(config_path)` was false, so **`cynork task create` never ran**.
 Additional hardening: `ensure_minimal_gateway_config_yaml` (`scripts/test_scripts/e2e_config_file.py`), `parse_json_loose` (`scripts/test_scripts/e2e_json.py`), `task_id`/`id` extraction, auth refresh before binary create, and `helpers.gateway_post_task_no_inference` for flaky `POST /v1/tasks` after long MCP runs (`e2e_0810`, `e2e_0812`).
 No defect in the `cynork` binary itself.
 
@@ -375,7 +376,7 @@ All three test layers MUST pass before this task is complete.
 ### Task 7: PTY Test Harness Extensions and TUI Structured Streaming UX
 
 **Status (2026-03-28):** Complete.
-See [Task 7 completion report (archived)](../2026-03-29_review_consolidated_summary.md) and [Task 7 discovery notes (archived)](../2026-03-29_review_consolidated_summary.md).
+See [Task 7 completion report (archived)](2026-03-29_review_consolidated_summary.md) and [Task 7 discovery notes (archived)](2026-03-29_review_consolidated_summary.md).
 BDD step bodies that remain `ErrPending` are tracked under Task 8.
 
 Extend the PTY harness (cancel-retain-partial, reconnect, scrollback assertions) and wire the TUI to the richer event model (TranscriptTurn/TranscriptPart, one in-flight turn, stored thinking/tool toggles, overwrite scopes, heartbeat, reconnect, secure-buffer).
@@ -471,8 +472,8 @@ All three test layers MUST pass before this task is complete.
 Replace remaining streaming and PTY BDD placeholders with real step implementations; finish the Python E2E test matrix and ensure all streaming tags pass.
 Also addresses BDD/PTY coverage from [2026-03-14_plan_after_tui_fix.md](2026-03-14_plan_after_tui_fix.md) Task 5 (Phase 6 alignment).
 
-**Status (2026-03-28):** Cynork BDD streaming simulation and mock SSE are implemented; see [Task 8 completion report (archived)](../2026-03-29_review_consolidated_summary.md) and [Task 8 discovery E2E audit (archived)](../2026-03-29_review_consolidated_summary.md).
-**Validation:** `just bdd-ci`, `just test-go-cover`, Task 8 E2E tags (`streaming`, `tui_pty`, `pma_inference,chat`), and **full `just e2e`** are green (**2026-03-28**); see [Task 8/9 red and testing closure (archived)](../2026-03-29_review_consolidated_summary.md).
+**Status (2026-03-28):** Cynork BDD streaming simulation and mock SSE are implemented; see [Task 8 completion report (archived)](2026-03-29_review_consolidated_summary.md) and [Task 8 discovery E2E audit (archived)](2026-03-29_review_consolidated_summary.md).
+**Validation:** `just bdd-ci`, `just test-go-cover`, Task 8 E2E tags (`streaming`, `tui_pty`, `pma_inference,chat`), and **full `just e2e`** are green (**2026-03-28**); see [Task 8/9 red and testing closure (archived)](2026-03-29_review_consolidated_summary.md).
 
 Source: [2026-03-19_streaming_remaining_work_execution_plan.md](2026-03-19_streaming_remaining_work_execution_plan.md) Task 6 and [2026-03-14_plan_after_tui_fix.md](2026-03-14_plan_after_tui_fix.md) Task 5.
 
@@ -484,16 +485,16 @@ Source: [2026-03-19_streaming_remaining_work_execution_plan.md](2026-03-19_strea
 
 #### Discovery (Task 8) Steps
 
-- [x] List every step in `steps2.go` that returns `godog.ErrPending` and classify: streaming, PTY-required, or other. *(See [Task 8 ErrPending classification (archived)](../2026-03-29_review_consolidated_summary.md); `steps2.go` has no returns, only comments - pending lives in companion registrars.)*
+- [x] List every step in `steps2.go` that returns `godog.ErrPending` and classify: streaming, PTY-required, or other. *(See [Task 8 ErrPending classification (archived)](2026-03-29_review_consolidated_summary.md); `steps2.go` has no returns, only comments - pending lives in companion registrars.)*
 - [x] Map each pending step to the feature scenario and to the implementation that makes it pass.
-- [x] Confirm Python E2E file ownership and identify overlap or gaps. *(See [Task 8 discovery E2E audit (archived)](../2026-03-29_review_consolidated_summary.md).)*
+- [x] Confirm Python E2E file ownership and identify overlap or gaps. *(See [Task 8 discovery E2E audit (archived)](2026-03-29_review_consolidated_summary.md).)*
 
 #### Red (Task 8)
 
 All three test layers MUST be added or updated before implementation.
 
 - **Python E2E tests** (verify and extend the full streaming test matrix):
-  - [x] Audit E2E files e2e_0610, e2e_0620, e2e_0630, e2e_0640, e2e_0650, e2e_0750, e2e_0760 for any remaining gaps or skipped assertions. *(2026-03-28: skips are environmental/upstream; see [Task 8/9 red and testing closure (archived)](../2026-03-29_review_consolidated_summary.md).)*
+  - [x] Audit E2E files e2e_0610, e2e_0620, e2e_0630, e2e_0640, e2e_0650, e2e_0750, e2e_0760 for any remaining gaps or skipped assertions. *(2026-03-28: skips are environmental/upstream; see [Task 8/9 red and testing closure (archived)](2026-03-29_review_consolidated_summary.md).)*
   - [x] Add missing E2E tests for Phase 6 scope: auth recovery, streaming cancellation, thinking visibility, collapsed-thinking placeholder. *(Covered by existing modules + Task 9 PTY startup test; no further Phase 6 gaps identified in audit.)*
   - [x] Run `just e2e` and document which streaming-related tests currently pass/fail/skip. *(2026-03-28: full suite 150 passed, 8 skipped; same report.)*
 - **BDD scenarios** (replace placeholders and extend):
@@ -528,16 +529,16 @@ All three test layers MUST pass before this task is complete.
 - [x] **BDD tests:** Run `just test-bdd` and `just bdd-ci` (strict); confirm implemented streaming scenarios pass with no pending steps remaining (except those documented as PTY-only).
 - **Python E2E tests:**
   - [x] Run `just setup-dev restart --force` then `just e2e --tags streaming`, `just e2e --tags tui_pty`, and `just e2e --tags pma_inference,chat`; confirm streaming-related modules pass. *(2026-03-28.)*
-  - [x] Full `just e2e` (entire suite): re-run **OK** (149 tests, 8 skipped) after E2E/stack fixes; see [Task 8 completion report (archived)](../2026-03-29_review_consolidated_summary.md).
+  - [x] Full `just e2e` (entire suite): re-run **OK** (149 tests, 8 skipped) after E2E/stack fixes; see [Task 8 completion report (archived)](2026-03-29_review_consolidated_summary.md).
 - [x] **Testing validation gate (Task 8 implementation):** **Go**, **BDD**, and tagged **Python E2E** above are satisfied for cynork streaming/BDD scope.
   Full `just e2e` green **2026-03-28** (150 tests, 8 skipped).
-    See [Task 8/9 red and testing closure (archived)](../2026-03-29_review_consolidated_summary.md).
+    See [Task 8/9 red and testing closure (archived)](2026-03-29_review_consolidated_summary.md).
 
 #### Closeout (Task 8)
 
-- [x] Generate a **task completion report** for Task 8: which BDD steps were implemented, which remain pending and why, which E2E tags pass. *(See [Task 8 completion report (archived)](../2026-03-29_review_consolidated_summary.md).)*
+- [x] Generate a **task completion report** for Task 8: which BDD steps were implemented, which remain pending and why, which E2E tags pass. *(See [Task 8 completion report (archived)](2026-03-29_review_consolidated_summary.md).)*
 - [x] Do not start Task 9 until closeout is done (Task 8 BDD/streaming deliverables and Testing gate for that scope).
-- [x] Mark completed implementation and testing lines in this task; **Red (Task 8)** checkboxes updated **2026-03-28** via [Task 8/9 red and testing closure (archived)](../2026-03-29_review_consolidated_summary.md).
+- [x] Mark completed implementation and testing lines in this task; **Red (Task 8)** checkboxes updated **2026-03-28** via [Task 8/9 red and testing closure (archived)](2026-03-29_review_consolidated_summary.md).
 
 ---
 
@@ -557,7 +558,7 @@ Source: [2026-03-14_plan_after_tui_fix.md](2026-03-14_plan_after_tui_fix.md) Tas
 - [x] Read the auth recovery requirements and TUI spec sections.
 - [x] Inspect cynork TUI and cmd for login flow, token validation, and gateway auth failure handling.
 - [x] Inspect session and TUI for project and model switching; identify gaps vs spec.
-- [x] Review PTY harness and E2E scripts for auth-recovery assertions; identify missing coverage. *(Notes: [Task 9 discovery notes (archived)](../2026-03-29_review_consolidated_summary.md).)*
+- [x] Review PTY harness and E2E scripts for auth-recovery assertions; identify missing coverage. *(Notes: [Task 9 discovery notes (archived)](2026-03-29_review_consolidated_summary.md).)*
 
 #### Red (Task 9)
 
@@ -565,7 +566,7 @@ All three test layers MUST be added or updated before implementation.
 
 - **Python E2E tests** (add or update first so spec-defined behavior is locked):
   - [x] Add PTY E2E tests for startup auth recovery (TUI renders, detects missing token, presents login overlay). *(`e2e_0765.test_tui_empty_env_tokens_shows_login_overlay`.)*
-  - [x] Add PTY E2E tests for in-session auth recovery (gateway returns auth failure, TUI presents login overlay without losing context). *(In-session 401 path: Go unit tests + BDD in-memory; live PTY 401 fault injection not required once BDD/unit green - see [Task 8/9 red and testing closure (archived)](../2026-03-29_review_consolidated_summary.md).)*
+  - [x] Add PTY E2E tests for in-session auth recovery (gateway returns auth failure, TUI presents login overlay without losing context). *(In-session 401 path: Go unit tests + BDD in-memory; live PTY 401 fault injection not required once BDD/unit green - see [Task 8/9 red and testing closure (archived)](2026-03-29_review_consolidated_summary.md).)*
   - [x] Add PTY E2E tests for project-context switching and model selection in-session. *(`e2e_0760` slash commands.)*
   - [x] Add PTY E2E tests for thread create/switch/rename, thinking visibility (scrollback/history-reload, YAML persist). *(`e2e_0750`, `e2e_0760`.)*
   - [x] Run `just e2e --tags auth` and `just e2e --tags tui_pty` and confirm new tests fail. *(Superseded: Red "fail first" was historical; **2026-03-28** tagged runs PASS.)*
@@ -608,11 +609,11 @@ All three test layers MUST pass before this task is complete.
 - [x] Run `just ci` and full `just e2e` for regression check. *(**2026-03-28**: `just ci` PASS; full `just e2e` 150 tests, 8 skipped.)*
 - [x] **Testing validation gate:** **Python E2E** (auth + tui_pty + full), **`just ci`**, and **full `just e2e`** green **2026-03-28**.
   **Go** and **BDD** satisfied as above.
-  See [Task 8/9 red and testing closure (archived)](../2026-03-29_review_consolidated_summary.md).
+  See [Task 8/9 red and testing closure (archived)](2026-03-29_review_consolidated_summary.md).
 
 #### Closeout (Task 9)
 
-- [x] Generate a **task completion report** for Task 9: what was done, what passed, any deviations. *([Task 9 completion report (archived)](../2026-03-29_review_consolidated_summary.md).)*
+- [x] Generate a **task completion report** for Task 9: what was done, what passed, any deviations. *([Task 9 completion report (archived)](2026-03-29_review_consolidated_summary.md).)*
 - [x] Do not start Task 10 until the **Testing validation gate** (Python E2E + `just ci` + full `just e2e`) is satisfied in a stable environment. *(Gate satisfied **2026-03-28**.)*
 - [x] Mark every completed step in this task with `- [x]`. (Last step - Red/Testing lines updated to match audit and runs.)
 

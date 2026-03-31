@@ -15,8 +15,21 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
-// Ensure MockDB implements database.Store interface
-var _ database.Store = (*MockDB)(nil)
+// Ensure MockDB implements database.Store and focused sub-interfaces.
+var (
+	_ database.Store                 = (*MockDB)(nil)
+	_ database.UserStore             = (*MockDB)(nil)
+	_ database.TaskStore             = (*MockDB)(nil)
+	_ database.NodeStore             = (*MockDB)(nil)
+	_ database.ChatStore             = (*MockDB)(nil)
+	_ database.PreferenceStore       = (*MockDB)(nil)
+	_ database.SkillStore            = (*MockDB)(nil)
+	_ database.WorkflowStore         = (*MockDB)(nil)
+	_ database.SystemSettingsStore   = (*MockDB)(nil)
+	_ database.Transactional         = (*MockDB)(nil)
+	_ database.WorkflowHandlerDeps   = (*MockDB)(nil)
+	_ database.OpenAIChatHandlerDeps = (*MockDB)(nil)
+)
 
 // MockDB provides a mock implementation for database operations.
 type MockDB struct {
@@ -64,12 +77,16 @@ type MockDB struct {
 	UpdatePreferenceErr error
 	DeletePreferenceErr error
 	GetTaskByIDErr      error
-	UpdateTaskStatusErr error
+	// GetTaskWorkflowLeaseErr, when set, makes GetTaskWorkflowLease return this error (workflow start WithTx path).
+	GetTaskWorkflowLeaseErr error
+	UpdateTaskStatusErr     error
 	// GetOrCreateDefaultProjectForUserErr, when set, makes GetOrCreateDefaultProjectForUser return this error.
 	GetOrCreateDefaultProjectForUserErr error
 	GetJobByIDErr                       error
 	GetJobsByTaskIDErr                  error
-	GetArtifactByTaskIDAndPathErr       error
+	// UpdateJobStatusErr, when set, makes UpdateJobStatus return this error.
+	UpdateJobStatusErr            error
+	GetArtifactByTaskIDAndPathErr error
 	// GetUserByIDErr, when set, makes GetUserByID return this error.
 	GetUserByIDErr error
 	// EnsureDefaultSkillErr, when set, makes EnsureDefaultSkill return this error (user-gateway run() path).
@@ -638,8 +655,51 @@ func (m *MockDB) GetJobsByTaskID(_ context.Context, taskID uuid.UUID) ([]*models
 		if jobs == nil {
 			return []*models.Job{}, nil
 		}
-		return jobs, nil
+		out := append([]*models.Job(nil), jobs...)
+		sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+		return out, nil
 	})
+}
+
+// ListJobsForTask returns one page of jobs for a task (created_at ascending) and the total count.
+func (m *MockDB) ListJobsForTask(_ context.Context, taskID uuid.UUID, limit, offset int) ([]*models.Job, int64, error) {
+	if m.GetJobsByTaskIDErr != nil {
+		return nil, 0, m.GetJobsByTaskIDErr
+	}
+	type out struct {
+		jobs  []*models.Job
+		total int64
+	}
+	res, err := runWithLock(m, false, func() (out, error) {
+		jobs := m.JobsByTask[taskID]
+		if jobs == nil {
+			return out{jobs: []*models.Job{}, total: 0}, nil
+		}
+		sorted := append([]*models.Job(nil), jobs...)
+		sort.Slice(sorted, func(i, j int) bool { return sorted[i].CreatedAt.Before(sorted[j].CreatedAt) })
+		total := int64(len(sorted))
+		if limit <= 0 {
+			limit = database.DefaultJobPageLimit
+		}
+		if limit > database.MaxJobPageLimit {
+			limit = database.MaxJobPageLimit
+		}
+		if offset < 0 {
+			offset = 0
+		}
+		if offset >= len(sorted) {
+			return out{jobs: []*models.Job{}, total: total}, nil
+		}
+		end := offset + limit
+		if end > len(sorted) {
+			end = len(sorted)
+		}
+		return out{jobs: sorted[offset:end], total: total}, nil
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	return res.jobs, res.total, nil
 }
 
 // CreateJob creates a new job for a task.
@@ -713,6 +773,9 @@ func (m *MockDB) GetJobByID(_ context.Context, id uuid.UUID) (*models.Job, error
 
 // UpdateJobStatus updates a job's status.
 func (m *MockDB) UpdateJobStatus(_ context.Context, jobID uuid.UUID, status string) error {
+	if m.UpdateJobStatusErr != nil {
+		return m.UpdateJobStatusErr
+	}
 	return m.setStatusAndUpdatedAt(jobID, status, false)
 }
 
@@ -889,4 +952,9 @@ func (m *MockDB) UpdateNodeWorkerAPIConfig(_ context.Context, nodeID uuid.UUID, 
 // CreateMcpToolCallAuditLog is a no-op for the mock unless ForceError is set; satisfies database.Store.
 func (m *MockDB) CreateMcpToolCallAuditLog(_ context.Context, _ *models.McpToolCallAuditLog) error {
 	return runWithWLockErr(m, func() error { return m.ForceError })
+}
+
+// WithTx runs fn with this mock as the Store. There is no SQL transaction; handlers use it for API symmetry with database.DB.WithTx.
+func (m *MockDB) WithTx(ctx context.Context, fn func(ctx context.Context, tx database.Store) error) error {
+	return fn(ctx, m)
 }

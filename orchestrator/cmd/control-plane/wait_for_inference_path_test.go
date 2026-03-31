@@ -11,8 +11,8 @@ import (
 
 // TestWaitForInferencePath_CancelDuringErrorBackoff verifies ctx cancel ends the poll sleep after InferencePathAvailable errors.
 func TestWaitForInferencePath_CancelDuringErrorBackoff(t *testing.T) {
-	testPMAPollInterval = 500 * time.Millisecond
-	defer func() { testPMAPollInterval = 0 }()
+	testPMAPollIntervalNs.Store(int64(500 * time.Millisecond))
+	defer testPMAPollIntervalNs.Store(0)
 	ctx, cancel := context.WithCancel(context.Background())
 	mockDB := testutil.NewMockDB()
 	mockDB.ForceError = errors.New("list failed")
@@ -35,8 +35,8 @@ func TestWaitForInferencePath_CancelDuringErrorBackoff(t *testing.T) {
 
 // TestWaitForInferencePath_CancelDuringNotReadyBackoff verifies ctx cancel ends the poll sleep when no inference path yet.
 func TestWaitForInferencePath_CancelDuringNotReadyBackoff(t *testing.T) {
-	testPMAPollInterval = 500 * time.Millisecond
-	defer func() { testPMAPollInterval = 0 }()
+	testPMAPollIntervalNs.Store(int64(500 * time.Millisecond))
+	defer testPMAPollIntervalNs.Store(0)
 	ctx, cancel := context.WithCancel(context.Background())
 	mockDB := testutil.NewMockDB()
 

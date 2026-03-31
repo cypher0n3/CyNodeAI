@@ -38,8 +38,8 @@ type ContainerInventory struct {
 	Runtime       string `gorm:"column:runtime;not null"`
 	ImageRef      string `gorm:"column:image_ref;not null"`
 	CreatedAt     string `gorm:"column:created_at;not null"`
-	LastSeenAt    string `gorm:"column:last_seen_at;not null"`
-	Status        string `gorm:"column:status;not null"`
+	LastSeenAt    string `gorm:"column:last_seen_at;not null;index"` // hot: retention / stale queries
+	Status        string `gorm:"column:status;not null;index"`       // hot: filter by running/exited
 	ExitCode      *int   `gorm:"column:exit_code"`
 	TaskID        string `gorm:"column:task_id"`
 	JobID         string `gorm:"column:job_id"`
@@ -66,10 +66,10 @@ func (ContainerEvent) TableName() string { return "container_event" }
 // LogEvent is the log_event table.
 type LogEvent struct {
 	LogID       string `gorm:"column:log_id;primaryKey"`
-	OccurredAt  string `gorm:"column:occurred_at;not null"`
+	OccurredAt  string `gorm:"column:occurred_at;not null;index"` // hot: time-ordered log queries
 	SourceKind  string `gorm:"column:source_kind;not null"`
 	SourceName  string `gorm:"column:source_name;not null"`
-	ContainerID string `gorm:"column:container_id"`
+	ContainerID string `gorm:"column:container_id;index"` // hot: filter by container
 	Stream      string `gorm:"column:stream"`
 	Level       string `gorm:"column:level"`
 	Message     string `gorm:"column:message;not null"`

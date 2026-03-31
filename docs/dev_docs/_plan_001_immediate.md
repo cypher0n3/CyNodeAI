@@ -599,7 +599,7 @@ Tasks are ordered from simplest/most independent to most complex, finishing with
 
 - Requirements: [`docs/requirements/orches.md`](../requirements/orches.md), [`docs/requirements/worker.md`](../requirements/worker.md), [`docs/requirements/pmagnt.md`](../requirements/pmagnt.md), [`docs/requirements/sbagnt.md`](../requirements/sbagnt.md), [`docs/requirements/mcpgat.md`](../requirements/mcpgat.md)
 - Tech specs: [`docs/tech_specs/orchestrator.md`](../tech_specs/orchestrator.md), [`docs/tech_specs/worker_node.md`](../tech_specs/worker_node.md), [`docs/tech_specs/cynode_pma.md`](../tech_specs/cynode_pma.md), [`docs/tech_specs/cynode_sba.md`](../tech_specs/cynode_sba.md), [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](../tech_specs/mcp/mcp_gateway_enforcement.md)
-- Review reports: [`2026-03-29_review_report_1_orchestrator.md`](2026-03-29_review_report_1_orchestrator.md) through [`2026-03-29_review_report_6_testing.md`](2026-03-29_review_report_6_testing.md)
+- Review reports: [`2026-03-29_review_report_1_orchestrator.md`](old/2026-03-29_review_report_1_orchestrator.md) through [`2026-03-29_review_report_6_testing.md`](old/2026-03-29_review_report_6_testing.md)
 - Implementation: `orchestrator/`, `worker_node/`, `agents/`, `cynork/`, `go_shared_libs/`
 
 ## Constraints
@@ -624,7 +624,7 @@ PMA `WriteTimeout` (120s) is less than the inference timeout (300s), causing str
 
 - [REQ-PMAGNT-0106](../requirements/pmagnt.md#req-pmagnt-0106) -- PMA streaming
 - [`docs/tech_specs/cynode_pma.md`](../tech_specs/cynode_pma.md)
-- [Review Report 3 section 2.2](2026-03-29_review_report_3_agents.md#22-high-severity-gaps)
+- [Review Report 3 section 2.2](old/2026-03-29_review_report_3_agents.md#22-high-severity-gaps)
 
 #### Discovery (Task 1) Steps
 
@@ -666,7 +666,7 @@ PMA `WriteTimeout` (120s) is less than the inference timeout (300s), causing str
 #### Task 2 Requirements and Specifications
 
 - [`docs/tech_specs/worker_node.md`](../tech_specs/worker_node.md) -- managed service lifecycle
-- [Review Report 2 section 3.1](2026-03-29_review_report_2_worker_node.md#31-node-agent)
+- [Review Report 2 section 3.1](old/2026-03-29_review_report_2_worker_node.md#31-node-agent)
 
 #### Discovery (Task 2) Steps
 
@@ -708,7 +708,7 @@ PMA `WriteTimeout` (120s) is less than the inference timeout (300s), causing str
 #### Task 3 Requirements and Specifications
 
 - [`docs/tech_specs/cynork_cli.md`](../tech_specs/cynork/cynork_cli.md) -- thread management
-- [Review Report 4 section 4.1](2026-03-29_review_report_4_cynork.md#41-critical-severity)
+- [Review Report 4 section 4.1](old/2026-03-29_review_report_4_cynork.md#41-critical-severity)
 
 #### Discovery (Task 3) Steps
 
@@ -750,7 +750,7 @@ The secure store has no `Close()` method; AES master key and ML-KEM decapsulatio
 #### Task 4 Requirements and Specifications
 
 - [`docs/tech_specs/worker_node.md`](../tech_specs/worker_node.md) -- secure store
-- [Review Report 2 section 5.1](2026-03-29_review_report_2_worker_node.md#51-critical-severity)
+- [Review Report 2 section 5.1](old/2026-03-29_review_report_2_worker_node.md#51-critical-severity)
 
 #### Discovery (Task 4) Steps
 
@@ -791,8 +791,8 @@ Token comparisons using `!=` in api-egress, workflow middleware, and worker API 
 
 #### Task 5 Requirements and Specifications
 
-- [Review Report 1 section 5.1](2026-03-29_review_report_1_orchestrator.md#51-critical-severity) -- orchestrator
-- [Review Report 2 section 5.2](2026-03-29_review_report_2_worker_node.md#52-high-severity) -- worker node
+- [Review Report 1 section 5.1](old/2026-03-29_review_report_1_orchestrator.md#51-critical-severity) -- orchestrator
+- [Review Report 2 section 5.2](old/2026-03-29_review_report_2_worker_node.md#52-high-severity) -- worker node
 
 #### Discovery (Task 5) Steps
 
@@ -835,7 +835,7 @@ Token comparisons using `!=` in api-egress, workflow middleware, and worker API 
 #### Task 6 Requirements and Specifications
 
 - [`go_shared_libs/contracts/workerapi/workerapi.go`](../../go_shared_libs/contracts/workerapi/workerapi.go) -- `RunJobResponse`
-- [Review Report 5 section 2.1](2026-03-29_review_report_5_shared_libs.md#21-critical-severity)
+- [Review Report 5 section 2.1](old/2026-03-29_review_report_5_shared_libs.md#21-critical-severity)
 
 #### Discovery (Task 6) Steps
 
@@ -879,7 +879,7 @@ Orchestrator ships hardcoded dev defaults for JWT secret, admin password, and PS
 #### Task 7 Requirements and Specifications
 
 - [`docs/tech_specs/orchestrator.md`](../tech_specs/orchestrator.md) -- configuration and security
-- [Review Report 1 section 5.1](2026-03-29_review_report_1_orchestrator.md#51-critical-severity)
+- [Review Report 1 section 5.1](old/2026-03-29_review_report_1_orchestrator.md#51-critical-severity)
 
 #### Discovery (Task 7) Steps
 
@@ -924,7 +924,7 @@ Three sub-issues: (a) no-token requests bypass allowlist enforcement, (b) PM age
 - [REQ-MCPGAT-0106](../requirements/mcpgat.md#req-mcpgat-0106) -- fail closed
 - [REQ-MCPGAT-0114](../requirements/mcpgat.md#req-mcpgat-0114) -- agent allowlists (PM, PA, sandbox)
 - [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](../tech_specs/mcp/mcp_gateway_enforcement.md)
-- [Review Report 1 section 2.1](2026-03-29_review_report_1_orchestrator.md#21-critical-gaps)
+- [Review Report 1 section 2.1](old/2026-03-29_review_report_1_orchestrator.md#21-critical-gaps)
 
 #### Discovery (Task 8) Steps
 
@@ -974,7 +974,7 @@ Tasks execute immediately on creation instead of entering `draft` state for PMA 
 - [REQ-ORCHES-0177](../requirements/orches.md#req-orches-0177) -- create MUST NOT start workflow
 - [REQ-ORCHES-0178](../requirements/orches.md#req-orches-0178) -- only `planning_state=ready` may start workflow
 - [`docs/tech_specs/orchestrator.md`](../tech_specs/orchestrator.md) -- task lifecycle
-- [Review Report 1 section 2.1](2026-03-29_review_report_1_orchestrator.md#21-critical-gaps)
+- [Review Report 1 section 2.1](old/2026-03-29_review_report_1_orchestrator.md#21-critical-gaps)
 
 #### Discovery (Task 9) Steps
 
@@ -1026,7 +1026,7 @@ Pod-based sandbox containers share the pod's network namespace, enabling direct 
 
 - [REQ-WORKER-0174](../requirements/worker.md#req-worker-0174) -- all traffic must route through worker proxies
 - [`docs/tech_specs/worker_node.md`](../tech_specs/worker_node.md) -- sandbox isolation
-- [Review Report 2 section 2.1](2026-03-29_review_report_2_worker_node.md#21-critical-gaps)
+- [Review Report 2 section 2.1](old/2026-03-29_review_report_2_worker_node.md#21-critical-gaps)
 
 #### Discovery (Task 10) Steps
 
@@ -1074,7 +1074,7 @@ SBA prompt construction violates REQ-SBAGNT-0113: persona, skills, and preferenc
 - [REQ-SBAGNT-0113](../requirements/sbagnt.md#req-sbagnt-0113) -- context ordering
 - [REQ-SBAGNT-0111](../requirements/sbagnt.md#req-sbagnt-0111) -- preferences rendering
 - [`docs/tech_specs/cynode_sba.md`](../tech_specs/cynode_sba.md)
-- [Review Report 3 section 2.1](2026-03-29_review_report_3_agents.md#21-critical-gaps)
+- [Review Report 3 section 2.1](old/2026-03-29_review_report_3_agents.md#21-critical-gaps)
 
 #### Discovery (Task 11) Steps
 
@@ -1123,7 +1123,7 @@ Three unimplemented PMA streaming features: model keep-warm (REQ-PMAGNT-0129), o
 - [REQ-PMAGNT-0125](../requirements/pmagnt.md#req-pmagnt-0125) -- secret scan
 - [REQ-PMAGNT-0124](../requirements/pmagnt.md#req-pmagnt-0124) -- overwrite events
 - [`docs/tech_specs/cynode_pma.md`](../tech_specs/cynode_pma.md)
-- [Review Report 3 section 2.1](2026-03-29_review_report_3_agents.md#21-critical-gaps)
+- [Review Report 3 section 2.1](old/2026-03-29_review_report_3_agents.md#21-critical-gaps)
 
 #### Discovery (Task 12) Steps
 
@@ -1171,7 +1171,7 @@ CI workflow exists at `.github/workflows/ci.yml` but needs verification that it 
 
 #### Task 13 Requirements and Specifications
 
-- [Review Report 6 section 4](2026-03-29_review_report_6_testing.md#4-ci-pipeline-analysis)
+- [Review Report 6 section 4](old/2026-03-29_review_report_6_testing.md#4-ci-pipeline-analysis)
 - Existing workflow: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
 
 #### Discovery (Task 13) Steps

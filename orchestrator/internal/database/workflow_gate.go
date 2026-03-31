@@ -35,13 +35,17 @@ func (db *DB) workflowGateCheckDeps(ctx context.Context, taskID uuid.UUID) (deny
 	if err != nil {
 		return "", err
 	}
+	if len(depIDs) == 0 {
+		return "", nil
+	}
+	tasksByID, err := db.getTasksByIDs(ctx, depIDs)
+	if err != nil {
+		return "", err
+	}
 	for _, depID := range depIDs {
-		t, err := db.GetTaskByID(ctx, depID)
-		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return "dependency task not found", nil
-			}
-			return "", err
+		t, ok := tasksByID[depID]
+		if !ok {
+			return "dependency task not found", nil
 		}
 		if t.Status != models.TaskStatusCompleted {
 			return "dependencies not satisfied", nil

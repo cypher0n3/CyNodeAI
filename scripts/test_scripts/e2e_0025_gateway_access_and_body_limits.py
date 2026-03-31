@@ -1,5 +1,6 @@
 # E2E: User-gateway access control and request-body limits (plans 1–3 regression hooks).
-# Traces: features/e2e/access_control_gateway.feature; REQ-MCPGAT-0001; httplimits.DefaultMaxAPIRequestBodyBytes.
+# Traces: features/e2e/access_control_gateway.feature; REQ-MCPGAT-0001;
+# httplimits.DefaultMaxAPIRequestBodyBytes.
 
 import os
 import tempfile
@@ -27,7 +28,7 @@ class TestGatewayUnauthenticatedAccess(unittest.TestCase):
 
 
 class TestGatewayBodyLimitsAndMCPAuth(unittest.TestCase):
-    """E2E: oversized POST /v1/tasks rejected; MCP requires bearer when agent tokens are configured."""
+    """E2E: oversized POST /v1/tasks rejected; MCP requires bearer when tokens are set."""
 
     tags = ["suite_orchestrator", "full_demo", "no_inference", "gateway", "control_plane"]
     prereqs = ["gateway", "config", "auth"]
@@ -37,7 +38,7 @@ class TestGatewayBodyLimitsAndMCPAuth(unittest.TestCase):
         self.assertTrue(ok, detail)
 
     def test_post_tasks_oversized_body_rejected(self):
-        """POST /v1/tasks with JSON > DefaultMaxAPIRequestBodyBytes must not succeed (400 from decode)."""
+        """POST /v1/tasks with JSON > DefaultMaxAPIRequestBodyBytes must fail (400 from decode)."""
         token = helpers.read_token_from_config(state.CONFIG_PATH)
         self.assertTrue(token, "access token required")
         prefix = b'{"prompt":"'

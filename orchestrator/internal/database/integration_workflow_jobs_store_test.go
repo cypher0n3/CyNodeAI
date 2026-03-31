@@ -7,6 +7,7 @@ package database
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -480,6 +481,108 @@ func TestIntegration_GetJobsByTaskID_Empty(t *testing.T) {
 	}
 	if len(jobs) != 0 {
 		t.Errorf("GetJobsByTaskID: expected empty, got %d", len(jobs))
+	}
+}
+
+func TestIntegration_ListJobsForTask_Pagination(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "paginated-jobs-task", nil, nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		payload := fmt.Sprintf(`{"i":%d}`, i)
+		if _, err := db.CreateJob(ctx, task.ID, payload); err != nil {
+			t.Fatalf("CreateJob: %v", err)
+		}
+	}
+	page, total, err := db.ListJobsForTask(ctx, task.ID, 2, 0)
+	if err != nil {
+		t.Fatalf("ListJobsForTask: %v", err)
+	}
+	if total != 3 || len(page) != 2 {
+		t.Fatalf("first page: total=%d len=%d", total, len(page))
+	}
+	page2, total2, err := db.ListJobsForTask(ctx, task.ID, 2, 2)
+	if err != nil {
+		t.Fatalf("ListJobsForTask offset: %v", err)
+	}
+	if total2 != 3 || len(page2) != 1 {
+		t.Fatalf("second page: total=%d len=%d", total2, len(page2))
+	}
+}
+
+func TestIntegration_GetJobsByTaskID_MoreThanOneChunk(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "many-jobs-task", nil, nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	const n = 105
+	for i := 0; i < n; i++ {
+		payload := fmt.Sprintf(`{"i":%d}`, i)
+		if _, err := db.CreateJob(ctx, task.ID, payload); err != nil {
+			t.Fatalf("CreateJob: %v", err)
+		}
+	}
+	jobs, err := db.GetJobsByTaskID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetJobsByTaskID: %v", err)
+	}
+	if len(jobs) != n {
+		t.Fatalf("got %d jobs want %d", len(jobs), n)
+	}
+}
+
+func TestIntegration_ListJobsForTask_DefaultLimitAndClamp(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "limit-clamp-jobs", nil, nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if _, err := db.CreateJob(ctx, task.ID, `{}`); err != nil {
+		t.Fatalf("CreateJob: %v", err)
+	}
+	page, total, err := db.ListJobsForTask(ctx, task.ID, 0, 0)
+	if err != nil {
+		t.Fatalf("ListJobsForTask limit 0: %v", err)
+	}
+	if total != 1 || len(page) != 1 {
+		t.Fatalf("limit 0: total=%d len=%d", total, len(page))
+	}
+	page2, total2, err := db.ListJobsForTask(ctx, task.ID, 500, -1)
+	if err != nil {
+		t.Fatalf("ListJobsForTask clamp: %v", err)
+	}
+	if total2 != 1 || len(page2) != 1 {
+		t.Fatalf("clamp: total=%d len=%d", total2, len(page2))
+	}
+}
+
+func TestIntegration_ListJobsPage_DefaultLimitAndNegativeOffset(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "listjobs-page-direct", nil, nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := db.CreateJob(ctx, task.ID, fmt.Sprintf(`{"i":%d}`, i)); err != nil {
+			t.Fatalf("CreateJob: %v", err)
+		}
+	}
+	jobs, err := db.listJobsPage(ctx, task.ID, 0, 0)
+	if err != nil {
+		t.Fatalf("listJobsPage: %v", err)
+	}
+	if len(jobs) != 2 {
+		t.Fatalf("default limit: got %d jobs", len(jobs))
+	}
+	jobs2, err := db.listJobsPage(ctx, task.ID, 1, -3)
+	if err != nil {
+		t.Fatalf("listJobsPage offset: %v", err)
+	}
+	if len(jobs2) != 1 || jobs2[0].ID != jobs[0].ID {
+		t.Fatalf("negative offset should act as 0: got %+v", jobs2)
 	}
 }
 

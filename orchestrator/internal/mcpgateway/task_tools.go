@@ -57,7 +57,14 @@ func handleTaskResult(ctx context.Context, store database.Store, args map[string
 		return http.StatusBadRequest, []byte(`{"error":"task_id required"}`), auditRec
 	}
 	rec.TaskID = taskID
-	resp, err := mcptaskbridge.TaskResultForUser(ctx, store, *taskID)
+	limit, offset, _, _, errMsg := mcptaskbridge.ParseListLimitOffset(args)
+	if errMsg != "" {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = &auditErrInvalidArguments
+		return http.StatusBadRequest, []byte(`{"error":"` + errMsg + `"}`), auditRec
+	}
+	resp, err := mcptaskbridge.TaskResultForUser(ctx, store, *taskID, limit, offset)
 	if err != nil {
 		if err == database.ErrNotFound {
 			code, b := writePreferenceErrToAudit(err, rec)
@@ -123,7 +130,14 @@ func handleTaskLogs(ctx context.Context, store database.Store, args map[string]i
 	}
 	rec.TaskID = taskID
 	stream := strArg(args, "stream")
-	resp, err := mcptaskbridge.TaskLogsForUser(ctx, store, *taskID, stream)
+	limit, offset, _, _, errMsg := mcptaskbridge.ParseListLimitOffset(args)
+	if errMsg != "" {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = &auditErrInvalidArguments
+		return http.StatusBadRequest, []byte(`{"error":"` + errMsg + `"}`), auditRec
+	}
+	resp, err := mcptaskbridge.TaskLogsForUser(ctx, store, *taskID, stream, limit, offset)
 	if err != nil {
 		if err == database.ErrNotFound {
 			code, b := writePreferenceErrToAudit(err, rec)

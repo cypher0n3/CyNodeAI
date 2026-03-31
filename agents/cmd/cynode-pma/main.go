@@ -87,7 +87,7 @@ func run(ctx context.Context, args []string) int {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	mux.HandleFunc("POST /internal/chat/completion", pma.ChatCompletionHandler(content, logger))
+	mux.HandleFunc("POST /internal/chat/completion", pma.ChatCompletionHandler(content, logger, pma.NewChatDepsFromEnv()))
 
 	server := &http.Server{
 		Addr:              cfg.ListenAddr,

@@ -67,7 +67,7 @@ var (
 
 // OpenAIChatHandler handles GET /v1/models and POST /v1/chat/completions.
 type OpenAIChatHandler struct {
-	db                   database.Store
+	db                   database.OpenAIChatHandlerDeps
 	logger               *slog.Logger
 	inferenceURL         string
 	inferenceModel       string
@@ -77,7 +77,7 @@ type OpenAIChatHandler struct {
 // NewOpenAIChatHandler creates a handler for the OpenAI-compatible chat surface.
 // PMA routing is only via worker-reported endpoints (capability managed_services_status); no env fallback.
 // workerAPIBearerToken is sent when calling worker proxy URLs so the worker-api accepts the request.
-func NewOpenAIChatHandler(db database.Store, logger *slog.Logger, inferenceURL, inferenceModel, workerAPIBearerToken string) *OpenAIChatHandler {
+func NewOpenAIChatHandler(db database.OpenAIChatHandlerDeps, logger *slog.Logger, inferenceURL, inferenceModel, workerAPIBearerToken string) *OpenAIChatHandler {
 	if inferenceModel == "" {
 		inferenceModel = pmaModelDefault
 	}
@@ -217,7 +217,7 @@ func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Reque
 // buildChatContextMessages loads thread history and builds the context message slice for routing.
 // Falls back to fallback messages if history is unavailable or empty.
 func (h *OpenAIChatHandler) buildChatContextMessages(ctx context.Context, threadID uuid.UUID, fallback []userapi.ChatMessage) []userapi.ChatMessage {
-	history, err := h.db.ListChatMessages(ctx, threadID, chatHistoryLimit)
+	history, _, err := h.db.ListChatMessages(ctx, threadID, chatHistoryLimit, 0)
 	if err != nil || len(history) == 0 {
 		if err != nil {
 			h.logger.Warn("failed to load chat history; using request messages", "error", err)

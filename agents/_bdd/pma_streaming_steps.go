@@ -148,7 +148,7 @@ func registerPMAStreamingSteps(sc *godog.ScenarioContext, state *agentsTestState
 		if len(state.pmaRequestJSON) == 0 {
 			state.pmaRequestJSON = []byte(`{"messages":[{"role":"user","content":"node-local bdd"}]}`)
 		}
-		handler := pma.ChatCompletionHandler("baseline", slog.Default())
+		handler := pma.ChatCompletionHandler("baseline", slog.Default(), pma.NewChatDepsFromEnv())
 		req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader(state.pmaRequestJSON))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
@@ -257,7 +257,7 @@ func registerPMAStreamingSteps(sc *godog.ScenarioContext, state *agentsTestState
 		}
 		os.Setenv("INFERENCE_MODEL", "qwen3.5:0.8b")
 		state.pmaRequestJSON = []byte(`{"messages":[{"role":"user","content":"stream bdd"}],"stream":true}`)
-		handler := pma.ChatCompletionHandler("baseline", slog.Default())
+		handler := pma.ChatCompletionHandler("baseline", slog.Default(), pma.NewChatDepsFromEnv())
 		req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader(state.pmaRequestJSON))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()

@@ -245,7 +245,7 @@ Bug 4 requires implementing the full spec queue model for chat input during stre
 
 - Requirements: [`docs/requirements/client.md`](../requirements/client.md)
 - Tech specs: [`docs/tech_specs/cynork/cynork_tui.md`](../tech_specs/cynork/cynork_tui.md), [`docs/tech_specs/cynork/cynork_tui_slash_commands.md`](../tech_specs/cynork/cynork_tui_slash_commands.md)
-- Review report: [`2026-03-29_review_report_4_cynork.md`](2026-03-29_review_report_4_cynork.md)
+- Review report: [`2026-03-29_review_report_4_cynork.md`](old/2026-03-29_review_report_4_cynork.md)
 - Implementation: `cynork/internal/tui/`
 - Todo: [`_todo.md`](_todo.md) section 2
 
@@ -275,7 +275,7 @@ Scrollback landmarks do not differentiate between new-thread-created and thread-
 - [`docs/tech_specs/cynork/cynork_tui_slash_commands.md`](../tech_specs/cynork/cynork_tui_slash_commands.md) -- `/auth login`, `/auth logout`
 - [`docs/tech_specs/cynork/cynork_tui.md`](../tech_specs/cynork/cynork_tui.md) -- thread initialization, scrollback landmarks
 - [`docs/requirements/client.md`](../requirements/client.md) -- REQ-CLIENT-0190 (thread init defers when token exists)
-- [Review Report 4](2026-03-29_review_report_4_cynork.md) -- stale thread after auth change (lines 153-155)
+- [Review Report 4](old/2026-03-29_review_report_4_cynork.md) -- stale thread after auth change (lines 153-155)
 
 #### Discovery (Task 1) Steps
 
@@ -324,7 +324,7 @@ However, the full spec queue model is not implemented: while streaming, Enter sh
 
 - [`docs/tech_specs/cynork/cynork_tui.md`](../tech_specs/cynork/cynork_tui.md) -- Queued Drafts and Deferred Send (~lines 164-196)
 - [`docs/requirements/client.md`](../requirements/client.md) -- REQ-CLIENT-0221 (queue model)
-- [Review Report 4](2026-03-29_review_report_4_cynork.md) -- Bug 4 partial fix (lines 62-63)
+- [Review Report 4](old/2026-03-29_review_report_4_cynork.md) -- Bug 4 partial fix (lines 62-63)
 
 #### Discovery (Task 2) Steps
 

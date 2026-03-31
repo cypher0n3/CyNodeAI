@@ -3,6 +3,7 @@ package mcptaskbridge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -21,9 +22,10 @@ func TestTaskToResponseAndJobToResponse(t *testing.T) {
 	summary := "s"
 	task := &models.Task{
 		TaskBase: models.TaskBase{
-			Status:  models.TaskStatusRunning,
-			Prompt:  &prompt,
-			Summary: &summary,
+			Status:        models.TaskStatusRunning,
+			Prompt:        &prompt,
+			Summary:       &summary,
+			PlanningState: models.PlanningStateDraft,
 		},
 		ID:        tid,
 		CreatedAt: time.Now(),
@@ -32,6 +34,9 @@ func TestTaskToResponseAndJobToResponse(t *testing.T) {
 	tr := TaskToResponse(task, userapi.StatusQueued, []string{"/a"})
 	if tr.TaskID != tid.String() || tr.Status != userapi.StatusQueued || len(tr.Attachments) != 1 {
 		t.Errorf("TaskToResponse: %+v", tr)
+	}
+	if tr.PlanningState != models.PlanningStateDraft {
+		t.Errorf("PlanningState: got %q", tr.PlanningState)
 	}
 	jid := uuid.New()
 	st := time.Now()
@@ -137,10 +142,141 @@ func TestTaskResultForUser_OK(t *testing.T) {
 	}
 	db.Jobs[jid] = job
 	db.JobsByTask[tid] = []*models.Job{job}
-	out, err := TaskResultForUser(ctx, db, tid)
+	out, err := TaskResultForUser(ctx, db, tid, 0, 0)
 	if err != nil || len(out.Jobs) != 1 {
 		t.Fatalf("TaskResultForUser: %+v err=%v", out, err)
 	}
+	if out.TotalCount != 1 || out.NextCursor != "" || out.NextOffset != nil {
+		t.Errorf("single-page metadata: %+v", out)
+	}
+}
+
+func TestTaskResultForUser_PaginationNext(t *testing.T) {
+	ctx := context.Background()
+	db := testutil.NewMockDB()
+	tid := uuid.New()
+	task := &models.Task{
+		TaskBase:  models.TaskBase{Status: models.TaskStatusCompleted},
+		ID:        tid,
+		CreatedAt: time.Now(),
+	}
+	db.Tasks[tid] = task
+	for i := 0; i < 3; i++ {
+		jid := uuid.New()
+		job := &models.Job{
+			JobBase:   models.JobBase{TaskID: tid, Status: models.JobStatusCompleted},
+			ID:        jid,
+			CreatedAt: time.Now().Add(time.Duration(i) * time.Millisecond),
+		}
+		db.Jobs[jid] = job
+		db.JobsByTask[tid] = append(db.JobsByTask[tid], job)
+	}
+	out, err := TaskResultForUser(ctx, db, tid, 1, 0)
+	if err != nil {
+		t.Fatalf("TaskResultForUser: %v", err)
+	}
+	if out.TotalCount != 3 || len(out.Jobs) != 1 || out.NextCursor == "" || out.NextOffset == nil {
+		t.Fatalf("expected page + next: %+v", out)
+	}
+	if *out.NextOffset != 1 {
+		t.Errorf("NextOffset: %v", *out.NextOffset)
+	}
+}
+
+func TestTaskResultForUser_ListJobsError(t *testing.T) {
+	ctx := context.Background()
+	db := testutil.NewMockDB()
+	tid := uuid.New()
+	db.Tasks[tid] = &models.Task{TaskBase: models.TaskBase{Status: models.TaskStatusRunning}, ID: tid, CreatedAt: time.Now()}
+	db.GetJobsByTaskIDErr = errors.New("db")
+	defer func() { db.GetJobsByTaskIDErr = nil }()
+	_, err := TaskResultForUser(ctx, db, tid, 0, 0)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestTaskLogsForUser_NextPage(t *testing.T) {
+	ctx := context.Background()
+	db := testutil.NewMockDB()
+	tid := uuid.New()
+	task := &models.Task{
+		TaskBase:  models.TaskBase{Status: models.TaskStatusRunning},
+		ID:        tid,
+		CreatedAt: time.Now(),
+	}
+	db.Tasks[tid] = task
+	res := `{"stdout":"a","stderr":"b"}`
+	for i := 0; i < 2; i++ {
+		jid := uuid.New()
+		job := &models.Job{
+			JobBase: models.JobBase{
+				TaskID: tid, Status: models.JobStatusCompleted,
+				Result: models.NewJSONBString(&res),
+			},
+			ID:        jid,
+			CreatedAt: time.Now().Add(time.Duration(i) * time.Millisecond),
+		}
+		db.Jobs[jid] = job
+		db.JobsByTask[tid] = append(db.JobsByTask[tid], job)
+	}
+	out, err := TaskLogsForUser(ctx, db, tid, streamParamAll, 1, 0)
+	if err != nil {
+		t.Fatalf("TaskLogsForUser: %v", err)
+	}
+	if out.TotalCount != 2 || out.NextCursor == "" {
+		t.Fatalf("logs pagination: %+v", out)
+	}
+}
+
+func TestListTasksForUser_StoreError(t *testing.T) {
+	ctx := context.Background()
+	db := testutil.NewMockDB()
+	db.ListTasksByUserErr = errors.New("db")
+	defer func() { db.ListTasksByUserErr = nil }()
+	_, err := ListTasksForUser(ctx, db, uuid.New(), 10, 0, "", "")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestCancelTask_Errors(t *testing.T) {
+	ctx := context.Background()
+	tid := uuid.New()
+	errCases := []struct {
+		name string
+		prep func(*testutil.MockDB)
+	}{
+		{"update task", func(db *testutil.MockDB) { db.UpdateTaskStatusErr = errors.New("fail") }},
+		{"list jobs", func(db *testutil.MockDB) { db.GetJobsByTaskIDErr = errors.New("fail") }},
+	}
+	for _, c := range errCases {
+		t.Run(c.name, func(t *testing.T) {
+			db := testutil.NewMockDB()
+			db.Tasks[tid] = &models.Task{TaskBase: models.TaskBase{Status: models.TaskStatusRunning}, ID: tid, CreatedAt: time.Now()}
+			c.prep(db)
+			defer func() {
+				db.UpdateTaskStatusErr = nil
+				db.GetJobsByTaskIDErr = nil
+			}()
+			if err := CancelTask(ctx, db, tid); err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+	t.Run("update job", func(t *testing.T) {
+		db := testutil.NewMockDB()
+		db.Tasks[tid] = &models.Task{TaskBase: models.TaskBase{Status: models.TaskStatusRunning}, ID: tid, CreatedAt: time.Now()}
+		jid := uuid.New()
+		job := &models.Job{JobBase: models.JobBase{TaskID: tid, Status: models.JobStatusRunning}, ID: jid, CreatedAt: time.Now()}
+		db.Jobs[jid] = job
+		db.JobsByTask[tid] = []*models.Job{job}
+		db.UpdateJobStatusErr = errors.New("fail")
+		defer func() { db.UpdateJobStatusErr = nil }()
+		if err := CancelTask(ctx, db, tid); err == nil {
+			t.Fatal("expected error")
+		}
+	})
 }
 
 func TestAggregateLogsFromJobs(t *testing.T) {
@@ -200,7 +336,7 @@ func TestListTasksForUser_StatusFilter(t *testing.T) {
 func TestTaskResultForUser_NotFound(t *testing.T) {
 	ctx := context.Background()
 	db := testutil.NewMockDB()
-	_, err := TaskResultForUser(ctx, db, uuid.New())
+	_, err := TaskResultForUser(ctx, db, uuid.New(), 0, 0)
 	if err != database.ErrNotFound {
 		t.Errorf("want ErrNotFound: %v", err)
 	}
@@ -274,14 +410,14 @@ func TestTaskLogsForUser_DefaultStream(t *testing.T) {
 	}
 	db.Jobs[jid] = job
 	db.JobsByTask[tid] = []*models.Job{job}
-	out, err := TaskLogsForUser(ctx, db, tid, "")
+	out, err := TaskLogsForUser(ctx, db, tid, "", 0, 0)
 	if err != nil {
 		t.Fatalf("TaskLogsForUser: %v", err)
 	}
 	if out.Stdout != "hello" || out.Stderr != "e" {
 		t.Errorf("logs: stdout=%q stderr=%q", out.Stdout, out.Stderr)
 	}
-	out, err = TaskLogsForUser(ctx, db, tid, "stdout")
+	out, err = TaskLogsForUser(ctx, db, tid, "stdout", 0, 0)
 	if err != nil || out.Stdout != "hello" || out.Stderr != "" {
 		t.Errorf("stdout only: %+v err=%v", out, err)
 	}

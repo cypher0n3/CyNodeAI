@@ -167,10 +167,14 @@ _start_impl *ARGS:
     export JWT_SECRET="${JWT_SECRET:-dev-jwt-secret-change-in-production}"
     export NODE_REGISTRATION_PSK="${NODE_PSK:-dev-node-psk-secret}"
     export WORKER_API_BEARER_TOKEN="${WORKER_API_BEARER_TOKEN:-dev-worker-api-token-change-me}"
+    export WORKFLOW_RUNNER_BEARER_TOKEN="${WORKFLOW_RUNNER_BEARER_TOKEN:-dev-workflow-runner-bearer}"
+    export WORKER_INTERNAL_AGENT_TOKEN="${WORKER_INTERNAL_AGENT_TOKEN:-dev-worker-internal-agent-token}"
+    export MCP_SANDBOX_AGENT_BEARER_TOKEN="${MCP_SANDBOX_AGENT_BEARER_TOKEN:-dev-mcp-sandbox-agent-token}"
+    export MCP_PA_AGENT_BEARER_TOKEN="${MCP_PA_AGENT_BEARER_TOKEN:-dev-mcp-pa-agent-token}"
     export CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-12082}"
     export ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT:-12080}"
     export BOOTSTRAP_ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
-    export PMA_ENABLED="false"
+    export PMA_ENABLED="${PMA_ENABLED:-true}"
     export PMA_IMAGE="cynodeai-cynode-pma:dev"
     export WORKER_API_TARGET_URL="http://${host_alias}:${WORKER_PORT:-12090}"
     export OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://${host_alias}:11434}"
@@ -288,6 +292,8 @@ test-e2e *ARGS:
     export PYTHONPATH="$root"
     export INFERENCE_PROXY_IMAGE="${INFERENCE_PROXY_IMAGE:-cynodeai-inference-proxy:dev}"
     export OLLAMA_UPSTREAM_URL="${OLLAMA_UPSTREAM_URL:-http://host.containers.internal:11434}"
+    # shellcheck source=/dev/null
+    . "$root/scripts/e2e_stack_env.sh"
     py="python3"
     [ -x "$root/.venv/bin/python3" ] && py="$root/.venv/bin/python3"
     "$py" scripts/test_scripts/run_e2e.py {{ ARGS }}
@@ -315,6 +321,11 @@ full-demo *ARGS:
     export NODE_STATE_DIR="{{ node_state_dir }}"
     # Export inference image so e2e_090 (UDS proxy URL in sandbox) and related tests run, not skip.
     export INFERENCE_PROXY_IMAGE="${INFERENCE_PROXY_IMAGE:-cynodeai-inference-proxy:dev}"
+    export OLLAMA_UPSTREAM_URL="${OLLAMA_UPSTREAM_URL:-http://host.containers.internal:11434}"
+    # shellcheck source=/dev/null
+    . "$root/scripts/e2e_stack_env.sh"
+    # full-demo: always run Ollama/inference smoke (do not inherit E2E_SKIP_INFERENCE_SMOKE=1 from CI).
+    export E2E_SKIP_INFERENCE_SMOKE=
     py="python3"; [ -x "$root/.venv/bin/python3" ] && py="$root/.venv/bin/python3"
     ok=0; (cd "$root" && PYTHONPATH="$root" "$py" scripts/test_scripts/run_e2e.py --tags full_demo) && ok=1
     [ "$stop_on_success" = "true" ] && [ "$ok" = "1" ] && (cd "$root" && just scripts/stop)

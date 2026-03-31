@@ -281,8 +281,8 @@ func TestResolveThreadForResponses_ErrorPaths(t *testing.T) {
 
 type listMsgErrDB struct{ *testutil.MockDB }
 
-func (m *listMsgErrDB) ListChatMessages(_ context.Context, _ uuid.UUID, _ int) ([]*models.ChatMessage, error) {
-	return nil, errors.New("list error")
+func (m *listMsgErrDB) ListChatMessages(_ context.Context, _ uuid.UUID, _, _ int) ([]*models.ChatMessage, int64, error) {
+	return nil, 0, errors.New("list error")
 }
 
 func TestResponsesContextMessages_ListError(t *testing.T) {
@@ -514,7 +514,7 @@ func TestCompleteViaPMAStream_PersistsStructuredParts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	msgs, err := db.ListChatMessages(context.Background(), threadID, 10)
+	msgs, _, err := db.ListChatMessages(context.Background(), threadID, 10, 0)
 	if err != nil || len(msgs) == 0 {
 		t.Fatalf("messages: %v len=%d", err, len(msgs))
 	}
@@ -556,7 +556,7 @@ func TestCompleteViaPMAStream_RelaysAmendmentAndFixesVisible(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "cynodeai.amendment") {
 		t.Fatalf("missing amendment: %s", rec.Body.String())
 	}
-	msgs, _ := db.ListChatMessages(context.Background(), threadID, 10)
+	msgs, _, _ := db.ListChatMessages(context.Background(), threadID, 10, 0)
 	last := msgs[len(msgs)-1]
 	if last.Content != "ok" {
 		t.Fatalf("persisted content = %q", last.Content)

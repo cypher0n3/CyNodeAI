@@ -383,6 +383,7 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 	registerOrchestratorBootstrapTasks(sc, state)
 	registerOrchestratorWorkflowEgressArtifacts(sc, state)
+	registerOrchestratorWorkflowEgressArtifactsTaskCRUD(sc, state)
 	registerOrchestratorTasksDispatchChat(sc, state)
 }
 

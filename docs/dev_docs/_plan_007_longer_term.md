@@ -470,8 +470,8 @@ These cover foundational infrastructure (migration system, config centralization
 
 - Requirements: [REQ-ORCHES-0150](../requirements/orches.md#req-orches-0150) (PMA via worker instruction), [REQ-ORCHES-0129](../requirements/orches.md#req-orches-0129) (continuous PMA monitoring)
 - Tech specs: [`docs/tech_specs/orchestrator.md`](../tech_specs/orchestrator.md), [`docs/tech_specs/orchestrator_bootstrap.md`](../tech_specs/orchestrator_bootstrap.md), [`docs/tech_specs/worker_node.md`](../tech_specs/worker_node.md)
-- Review reports: [`2026-03-29_review_report_1_orchestrator.md`](2026-03-29_review_report_1_orchestrator.md), [`2026-03-29_review_report_2_worker_node.md`](2026-03-29_review_report_2_worker_node.md), [`2026-03-29_review_report_6_testing.md`](2026-03-29_review_report_6_testing.md)
-- Consolidated summary: [`2026-03-29_review_consolidated_summary.md`](2026-03-29_review_consolidated_summary.md) section 2.6
+- Review reports: [`2026-03-29_review_report_1_orchestrator.md`](old/2026-03-29_review_report_1_orchestrator.md), [`2026-03-29_review_report_2_worker_node.md`](old/2026-03-29_review_report_2_worker_node.md), [`2026-03-29_review_report_6_testing.md`](old/2026-03-29_review_report_6_testing.md)
+- Consolidated summary: [`2026-03-29_review_consolidated_summary.md`](old/2026-03-29_review_consolidated_summary.md) section 2.6
 - Implementation: `orchestrator/`, `worker_node/`, `agents/`, `cynork/`
 
 ## Constraints
@@ -495,8 +495,8 @@ Both orchestrator and worker node use GORM `AutoMigrate` on every startup with n
 
 #### Task 1 Requirements and Specifications
 
-- [Review Report 1](2026-03-29_review_report_1_orchestrator.md) -- `migrate.go:17-22` (no transaction), `migrate.go:28-69` (no version tracking)
-- [Review Report 2](2026-03-29_review_report_2_worker_node.md) -- `store.go:42-51` (AutoMigrate), SchemaVersion placeholder
+- [Review Report 1](old/2026-03-29_review_report_1_orchestrator.md) -- `migrate.go:17-22` (no transaction), `migrate.go:28-69` (no version tracking)
+- [Review Report 2](old/2026-03-29_review_report_2_worker_node.md) -- `store.go:42-51` (AutoMigrate), SchemaVersion placeholder
 
 #### Discovery (Task 1) Steps
 
@@ -543,7 +543,7 @@ The orchestrator currently starts PMA as a direct subprocess instead of going th
 
 - [REQ-ORCHES-0150](../requirements/orches.md#req-orches-0150) -- PMA started via worker instruction
 - [`docs/tech_specs/orchestrator_bootstrap.md`](../tech_specs/orchestrator_bootstrap.md) -- PMA bootstrap via worker
-- [Review Report 1](2026-03-29_review_report_1_orchestrator.md) -- `control-plane/main.go` + `pmasubprocess.Start`
+- [Review Report 1](old/2026-03-29_review_report_1_orchestrator.md) -- `control-plane/main.go` + `pmasubprocess.Start`
 
 #### Discovery (Task 2) Steps
 
@@ -586,7 +586,7 @@ The orchestrator only has a `readyzHandler` for PMA health; there is no continuo
 #### Task 3 Requirements and Specifications
 
 - [REQ-ORCHES-0129](../requirements/orches.md#req-orches-0129) -- continuous PMA monitoring
-- [Review Report 1](2026-03-29_review_report_1_orchestrator.md) -- `readyzHandler` only, no continuous loop
+- [Review Report 1](old/2026-03-29_review_report_1_orchestrator.md) -- `readyzHandler` only, no continuous loop
 
 #### Discovery (Task 3) Steps
 
@@ -628,7 +628,7 @@ Worker node configuration is scattered across env var reads, flags, and hardcode
 
 #### Task 4 Requirements and Specifications
 
-- [Review Report 2](2026-03-29_review_report_2_worker_node.md) -- section 3.3 (no single validated config package)
+- [Review Report 2](old/2026-03-29_review_report_2_worker_node.md) -- section 3.3 (no single validated config package)
 
 #### Discovery (Task 4) Steps
 
@@ -672,7 +672,7 @@ This pattern is not goroutine-safe and prevents `t.Parallel()`.
 
 #### Task 5 Requirements and Specifications
 
-- [Consolidated summary section 2.6](2026-03-29_review_consolidated_summary.md#26-global-mutable-state-for-test-injection) -- cross-module pattern
+- [Consolidated summary section 2.6](old/2026-03-29_review_consolidated_summary.md#26-global-mutable-state-for-test-injection) -- cross-module pattern
 - All review reports
 
 #### Discovery (Task 5) Steps
@@ -719,7 +719,7 @@ Streaming throughput, concurrent operations, and failure recovery are untested u
 
 #### Task 6 Requirements and Specifications
 
-- [Review Report 6](2026-03-29_review_report_6_testing.md) -- no benchmarks, no load tests, no chaos scenarios
+- [Review Report 6](old/2026-03-29_review_report_6_testing.md) -- no benchmarks, no load tests, no chaos scenarios
 
 #### Discovery (Task 6) Steps
 

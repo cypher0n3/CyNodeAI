@@ -55,13 +55,13 @@ type agentsTestState struct {
 	pmaMockInference  *httptest.Server
 	pmaCapturedPrompt string
 	// pmaCapturedChatMessages is populated when the mock records Ollama /api/chat "messages".
-	pmaCapturedChatMessages   []pmaChatMsg
-	pmaCapturedInferenceBody  string
-	pmaCapturedNumCtx         int
-	pmaResponseStatus         int
-	pmaResponseBody         []byte
-	pmaOldOllamaURL    string // restored in After when mock was used
-	pmaOldOllamaNumCtx string
+	pmaCapturedChatMessages  []pmaChatMsg
+	pmaCapturedInferenceBody string
+	pmaCapturedNumCtx        int
+	pmaResponseStatus        int
+	pmaResponseBody          []byte
+	pmaOldOllamaURL          string // restored in After when mock was used
+	pmaOldOllamaNumCtx       string
 	// PMA streaming (NDJSON body from /internal/chat/completion when stream=true)
 	pmaStreamLines []string // Ollama-style NDJSON lines for mock inference server
 	// Task result contract scenario (SBA result from task result)
@@ -841,7 +841,7 @@ func registerPMASteps(sc *godog.ScenarioContext, state *agentsTestState) {
 		if len(state.pmaRequestJSON) == 0 {
 			return fmt.Errorf("no PMA request body set")
 		}
-		handler := pma.ChatCompletionHandler("baseline", slog.Default())
+		handler := pma.ChatCompletionHandler("baseline", slog.Default(), pma.NewChatDepsFromEnv())
 		req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", strings.NewReader(string(state.pmaRequestJSON)))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()

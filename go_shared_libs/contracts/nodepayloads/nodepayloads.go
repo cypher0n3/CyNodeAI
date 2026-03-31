@@ -1,6 +1,11 @@
 // Package nodepayloads defines node registration, bootstrap, and capability payloads.
 package nodepayloads
 
+import (
+	"errors"
+	"strings"
+)
+
 // CapabilityReport represents the capability report from a node.
 // See docs/tech_specs/worker_node_payloads.md node_capability_report_v1.
 type CapabilityReport struct {
@@ -131,6 +136,23 @@ type TLSInfo struct {
 type RegistrationRequest struct {
 	PSK        string           `json:"psk"`
 	Capability CapabilityReport `json:"capability"`
+}
+
+// Validate checks required fields for registration (PSK authorization is orchestrator-side).
+func (r *RegistrationRequest) Validate() error {
+	if r == nil {
+		return errors.New("registration request is nil")
+	}
+	if strings.TrimSpace(r.PSK) == "" {
+		return errors.New("psk is required")
+	}
+	if r.Capability.Version != 1 {
+		return errors.New("capability.version must be 1")
+	}
+	if strings.TrimSpace(r.Capability.Node.NodeSlug) == "" {
+		return errors.New("capability.node.node_slug is required")
+	}
+	return nil
 }
 
 // BootstrapResponse represents the bootstrap payload returned on registration.

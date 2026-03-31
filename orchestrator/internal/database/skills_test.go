@@ -29,7 +29,7 @@ func TestSkills_CreateGetListUpdateDelete_Integration(t *testing.T) {
 	if got.Name != "My Skill" || got.Content != "# Content" {
 		t.Errorf("GetSkillByID: got name=%q content=%q", got.Name, got.Content)
 	}
-	list, err := db.ListSkillsForUser(ctx, user.ID, "", "")
+	list, _, err := db.ListSkillsForUser(ctx, user.ID, "", "", 100, 0)
 	if err != nil {
 		t.Fatalf("ListSkillsForUser: %v", err)
 	}
@@ -108,33 +108,58 @@ func TestSkills_ListSkillsForUser_WithFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSkill group: %v", err)
 	}
-	list, err := db.ListSkillsForUser(ctx, user.ID, scopeUser, "")
+	list, _, err := db.ListSkillsForUser(ctx, user.ID, scopeUser, "", 100, 0)
 	if err != nil {
 		t.Fatalf("ListSkillsForUser scope filter: %v", err)
 	}
 	if len(list) < 1 {
 		t.Errorf("ListSkillsForUser(scope=user): want at least 1, got %d", len(list))
 	}
-	listGroup, err := db.ListSkillsForUser(ctx, user.ID, "group", "")
+	listGroup, _, err := db.ListSkillsForUser(ctx, user.ID, "group", "", 100, 0)
 	if err != nil {
 		t.Fatalf("ListSkillsForUser scope=group: %v", err)
 	}
 	if len(listGroup) < 1 {
 		t.Errorf("ListSkillsForUser(scope=group): want at least 1, got %d", len(listGroup))
 	}
-	list2, err := db.ListSkillsForUser(ctx, user.ID, "", "")
+	list2, _, err := db.ListSkillsForUser(ctx, user.ID, "", "", 100, 0)
 	if err != nil {
 		t.Fatalf("ListSkillsForUser no filter: %v", err)
 	}
 	if len(list2) < 1 {
 		t.Errorf("ListSkillsForUser(no filter): want at least 1, got %d", len(list2))
 	}
-	list3, err := db.ListSkillsForUser(ctx, user.ID, scopeUser, user.ID.String())
+	list3, _, err := db.ListSkillsForUser(ctx, user.ID, scopeUser, user.ID.String(), 100, 0)
 	if err != nil {
 		t.Fatalf("ListSkillsForUser owner filter: %v", err)
 	}
 	if len(list3) < 1 {
 		t.Errorf("ListSkillsForUser(owner filter): want at least 1, got %d", len(list3))
+	}
+}
+
+func TestSkills_ListSkillsForUser_DefaultLimitAndClamp(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "skills-limit-"+uuid.New().String()[:8], nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if _, err := db.CreateSkill(ctx, "L1", "#", scopeUser, &user.ID, false); err != nil {
+		t.Fatalf("CreateSkill: %v", err)
+	}
+	_, total, err := db.ListSkillsForUser(ctx, user.ID, "", "", 0, 0)
+	if err != nil {
+		t.Fatalf("ListSkillsForUser limit 0: %v", err)
+	}
+	if total < 1 {
+		t.Fatalf("total=%d", total)
+	}
+	_, total2, err := db.ListSkillsForUser(ctx, user.ID, "", "", 500, -3)
+	if err != nil {
+		t.Fatalf("ListSkillsForUser clamp: %v", err)
+	}
+	if total2 != total {
+		t.Fatalf("total %d vs %d", total, total2)
 	}
 }
 

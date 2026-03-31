@@ -104,7 +104,8 @@ Structural and design concerns in the orchestrator codebase.
 
 ### 3.1 Database Layer
 
-- ❌ **God interface (60+ methods).** `Store` in `database.go:45-169` spans users, auth, tasks, jobs, nodes, chat, preferences, system settings, skills, workflows, access control, artifacts, and API credentials.
+- ❌ **God interface (60+ methods).**
+  `Store` in `database.go:45-169` spans users, auth, tasks, jobs, nodes, chat, preferences, system settings, skills, workflows, access control, artifacts, and API credentials.
   Violates Interface Segregation Principle; any consumer needing one domain must mock the entire interface.
   Should be split into focused sub-interfaces composed via embedding.
 
@@ -118,7 +119,8 @@ Structural and design concerns in the orchestrator codebase.
   No migration version tracking; every startup re-runs all AutoMigrate calls.
   Should use versioned migrations (golang-migrate, goose, or atlas).
 
-- ⚠️ **No migration transaction.** `RunSchema` at `migrate.go:17-22` runs AutoMigrate then DDL bootstrap sequentially without a transaction.
+- ⚠️ **No migration transaction.**
+  `RunSchema` at `migrate.go:17-22` runs AutoMigrate then DDL bootstrap sequentially without a transaction.
 
 ### 3.2 Handler Layer
 
@@ -281,7 +283,8 @@ Query efficiency, allocation, and caching issues.
 
 ## 7 Maintainability Issues
 
-- **Inconsistent error comparison.** `skills.go:107,194,226,271,284` uses `err == database.ErrNotFound` instead of `errors.Is`.
+- **Inconsistent error comparison.**
+  `skills.go:107,194,226,271,284` uses `err == database.ErrNotFound` instead of `errors.Is`.
   Same in `task_tools.go:62,128`.
 
 - **Duplicate conversion code.**

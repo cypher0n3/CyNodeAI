@@ -15,7 +15,12 @@ import urllib.request
 from scripts.test_scripts import config
 from scripts.test_scripts.e2e_config_file import ensure_minimal_gateway_config_yaml
 from scripts.test_scripts.e2e_json import parse_json_loose
+from scripts.test_scripts import e2e_json_helpers
 import scripts.test_scripts.e2e_state as state
+
+parse_json_safe = e2e_json_helpers.parse_json_safe
+jq_get = e2e_json_helpers.jq_get
+get_sba_job_result = e2e_json_helpers.get_sba_job_result
 
 # Cynork persists gateway_url + TUI prefs in config.yaml only (no secrets).
 # E2E stores access/refresh tokens beside the config file for subprocess env injection.
@@ -683,14 +688,6 @@ def parse_sse_stream_typed(response):
     return events, found_done
 
 
-def parse_json_safe(text):
-    """Parse JSON; return dict or None."""
-    try:
-        return json.loads(text) if text else None
-    except json.JSONDecodeError:
-        return None
-
-
 def _task_id_from_create_task_payload(data):
     """Return task id string from create-task JSON (user API / cynork), or ""."""
     if not isinstance(data, dict):
@@ -741,28 +738,6 @@ def _ensure_e2e_task_via_gateway(token, max_attempts):
             state.TASK_ID = tid
             return True
     return False
-
-
-def jq_get(obj, *keys, default=None):
-    """Get nested key; e.g. jq_get(d, 'jobs', 0, 'result')."""
-    for k in keys:
-        if obj is None or not isinstance(obj, (dict, list)):
-            return default
-        if isinstance(obj, list) and isinstance(k, int):
-            obj = obj[k] if 0 <= k < len(obj) else None
-        else:
-            obj = obj.get(k) if isinstance(obj, dict) else None
-    return obj
-
-
-def get_sba_job_result(result_data):
-    """Job result from task result (jobs[0].result or parsed stdout). Return dict or None."""
-    job_result = jq_get(result_data, "jobs", 0, "result")
-    if not job_result and result_data:
-        raw = result_data.get("stdout")
-        if isinstance(raw, str):
-            job_result = parse_json_safe(raw)
-    return job_result
 
 
 def cynork_task_ready(task_id, config_path):

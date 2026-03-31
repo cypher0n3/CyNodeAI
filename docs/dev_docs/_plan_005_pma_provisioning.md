@@ -456,7 +456,7 @@ This spans the orchestrator (binding model, greedy provisioning, routing, teardo
 
 - Requirements: [REQ-ORCHES-0188](../requirements/orches.md#req-orches-0188), [REQ-ORCHES-0190](../requirements/orches.md#req-orches-0190), [REQ-ORCHES-0191](../requirements/orches.md#req-orches-0191), [REQ-ORCHES-0162](../requirements/orches.md#req-orches-0162), [REQ-ORCHES-0151](../requirements/orches.md#req-orches-0151), [REQ-WORKER-0176](../requirements/worker.md#req-worker-0176), [REQ-WORKER-0175](../requirements/worker.md#req-worker-0175)
 - Tech specs: [`docs/tech_specs/orchestrator_bootstrap.md`](../tech_specs/orchestrator_bootstrap.md) (PmaInstancePerSessionBinding), [`docs/tech_specs/orchestrator.md`](../tech_specs/orchestrator.md) (PmaGreedyProvisioningOnLogin)
-- Review reports: [`2026-03-29_review_report_1_orchestrator.md`](2026-03-29_review_report_1_orchestrator.md), [`2026-03-29_review_report_2_worker_node.md`](2026-03-29_review_report_2_worker_node.md)
+- Review reports: [`2026-03-29_review_report_1_orchestrator.md`](old/2026-03-29_review_report_1_orchestrator.md), [`2026-03-29_review_report_2_worker_node.md`](old/2026-03-29_review_report_2_worker_node.md)
 - Implementation: `orchestrator/`, `worker_node/`, `cynork/`
 
 ## Constraints

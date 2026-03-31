@@ -6,6 +6,7 @@ import (
 	"crypto/cipher"
 	"crypto/mlkem"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/secretutil"
+	"golang.org/x/crypto/hkdf"
 )
 
 const (
@@ -28,9 +30,12 @@ const (
 	agentTokenStoreDir            = "agent_tokens"
 	agentTokenEncryptedFileSuffix = ".json.enc"
 	agentTokenEncryptionAlgorithm = "AES-256-GCM"
-	envelopeVersionAEAD           = 1
-	envelopeVersionPQ             = 2
+	envelopeVersionAEADLegacy     = 1 // master-key AES-GCM, no AAD (legacy)
+	envelopeVersionPQLegacy       = 2 // ML-KEM + direct shared secret as AES key (legacy)
+	envelopeVersionAEADAAD        = 3 // master-key AES-GCM with AAD
+	envelopeVersionPQHKDF         = 4 // ML-KEM + HKDF + AES-GCM with AAD
 	algorithmPQKEM                = "ML-KEM-768+AES-256-GCM"
+	algorithmPQKEMHKDF            = "ML-KEM-768+HKDF+AES-256-GCM"
 	kemKeystoreFile               = ".kem_keystore.enc"
 	requiredKeyLenBytes           = 32
 )
@@ -215,6 +220,25 @@ func (s *Store) tokenPath(serviceID string) (string, error) {
 	return filepath.Join(s.tokenDir(), filename), nil
 }
 
+func aadAgentToken(serviceID string) []byte {
+	return []byte("cynode.agent_token.v1|" + serviceID)
+}
+
+func aadKEMKeystore() []byte {
+	return []byte("cynode.kem_keystore.v1")
+}
+
+func aadPQAgentToken(serviceID string) []byte {
+	return []byte("cynode.pq_agent_token.v1|" + serviceID)
+}
+
+func derivePQAESKey(sharedSecret, kemCt []byte) []byte {
+	r := hkdf.New(sha256.New, sharedSecret, kemCt, []byte("cynodeai.securestore.pq.v1"))
+	key := make([]byte, requiredKeyLenBytes)
+	_, _ = io.ReadFull(r, key)
+	return key
+}
+
 // buildEncryptedEnvelopeFromRecord marshals the record and builds an encrypted envelope (call inside secretutil.RunWithSecret).
 func (s *Store) buildEncryptedEnvelopeFromRecord(record AgentTokenRecord) (encryptedEnvelope, error) {
 	plaintext, err := json.Marshal(record)
@@ -222,7 +246,7 @@ func (s *Store) buildEncryptedEnvelopeFromRecord(record AgentTokenRecord) (encry
 		return encryptedEnvelope{}, fmt.Errorf("marshal token record: %w", err)
 	}
 	defer zeroBytes(plaintext)
-	return s.buildEncryptedEnvelope(plaintext)
+	return s.buildEncryptedEnvelope(plaintext, record.ServiceID)
 }
 
 // PutAgentToken writes or rotates a per-service token record.
@@ -281,8 +305,8 @@ func (s *Store) PutAgentToken(serviceID, token, expiresAt string) error {
 }
 
 // decryptAndParseTokenRecord decrypts the envelope and parses the token record, checking expiry (call inside secretutil.RunWithSecret).
-func (s *Store) decryptAndParseTokenRecord(env *encryptedEnvelope, nonce, payload []byte) (*AgentTokenRecord, error) {
-	plaintext, err := s.decryptEnvelope(env, nonce, payload)
+func (s *Store) decryptAndParseTokenRecord(env *encryptedEnvelope, nonce, payload []byte, serviceID string) (*AgentTokenRecord, error) {
+	plaintext, err := s.decryptEnvelope(env, nonce, payload, serviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -326,13 +350,22 @@ func (s *Store) GetAgentToken(serviceID string) (*AgentTokenRecord, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode envelope payload: %w", err)
 	}
+	sanitized, err := sanitizeServiceID(serviceID)
+	if err != nil {
+		return nil, err
+	}
 	var record *AgentTokenRecord
 	var decErr error
 	secretutil.RunWithSecret(func() {
-		record, decErr = s.decryptAndParseTokenRecord(&env, nonce, payload)
+		record, decErr = s.decryptAndParseTokenRecord(&env, nonce, payload, sanitized)
 	})
 	if decErr != nil {
 		return nil, decErr
+	}
+	// Re-seal on read so legacy v1/v2 on-disk envelopes migrate to AAD/HKDF formats.
+	if env.Version == envelopeVersionAEADLegacy ||
+		(env.Version == envelopeVersionPQLegacy && env.Algorithm == algorithmPQKEM) {
+		_ = s.PutAgentToken(record.ServiceID, record.Token, record.ExpiresAt)
 	}
 	return record, nil
 }
@@ -376,7 +409,7 @@ func (s *Store) ListAgentTokenServiceIDs() ([]string, error) {
 	return out, nil
 }
 
-func encrypt(plaintext, key []byte) (ciphertext, nonce []byte, err error) {
+func encrypt(plaintext, key, aad []byte) (ciphertext, nonce []byte, err error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create cipher: %w", err)
@@ -389,11 +422,11 @@ func encrypt(plaintext, key []byte) (ciphertext, nonce []byte, err error) {
 	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, nil, fmt.Errorf("read nonce: %w", err)
 	}
-	ciphertext = gcm.Seal(nil, nonce, plaintext, nil)
+	ciphertext = gcm.Seal(nil, nonce, plaintext, aad)
 	return ciphertext, nonce, nil
 }
 
-func decrypt(ciphertext, nonce, key []byte) ([]byte, error) {
+func decrypt(ciphertext, nonce, key, aad []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("create cipher: %w", err)
@@ -402,7 +435,7 @@ func decrypt(ciphertext, nonce, key []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create gcm: %w", err)
 	}
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, aad)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt payload: %w", err)
 	}
@@ -457,7 +490,10 @@ func (s *Store) loadKEMKeyFromFile(path string) (*mlkem.DecapsulationKey768, err
 	if err := json.Unmarshal(raw, &env); err != nil {
 		return nil, fmt.Errorf("decode kem keystore envelope: %w", err)
 	}
-	if env.Version != envelopeVersionAEAD || env.Algorithm != agentTokenEncryptionAlgorithm {
+	if env.Version != envelopeVersionAEADAAD && env.Version != envelopeVersionAEADLegacy {
+		return nil, errors.New("unsupported kem keystore envelope")
+	}
+	if env.Algorithm != agentTokenEncryptionAlgorithm {
 		return nil, errors.New("unsupported kem keystore envelope")
 	}
 	nonce, err := base64.StdEncoding.DecodeString(env.NonceB64)
@@ -471,9 +507,15 @@ func (s *Store) loadKEMKeyFromFile(path string) (*mlkem.DecapsulationKey768, err
 	var dk *mlkem.DecapsulationKey768
 	var loadErr error
 	secretutil.RunWithSecret(func() {
-		seed, err := decrypt(payload, nonce, s.key)
-		if err != nil {
-			loadErr = fmt.Errorf("decrypt kem keystore: %w", err)
+		var seed []byte
+		var decErr error
+		if env.Version == envelopeVersionAEADAAD {
+			seed, decErr = decrypt(payload, nonce, s.key, aadKEMKeystore())
+		} else {
+			seed, decErr = decrypt(payload, nonce, s.key, nil)
+		}
+		if decErr != nil {
+			loadErr = fmt.Errorf("decrypt kem keystore: %w", decErr)
 			return
 		}
 		defer zeroBytes(seed)
@@ -499,13 +541,13 @@ func (s *Store) persistNewKEMKey(path string) (*mlkem.DecapsulationKey768, error
 	secretutil.RunWithSecret(func() {
 		seed := dk.Bytes()
 		defer zeroBytes(seed)
-		ciphertext, nonce, persistErr = encrypt(seed, s.key)
+		ciphertext, nonce, persistErr = encrypt(seed, s.key, aadKEMKeystore())
 	})
 	if persistErr != nil {
 		return nil, fmt.Errorf("encrypt kem keystore: %w", persistErr)
 	}
 	env := encryptedEnvelope{
-		Version:    envelopeVersionAEAD,
+		Version:    envelopeVersionAEADAAD,
 		Algorithm:  agentTokenEncryptionAlgorithm,
 		NonceB64:   base64.StdEncoding.EncodeToString(nonce),
 		PayloadB64: base64.StdEncoding.EncodeToString(ciphertext),
@@ -520,34 +562,46 @@ func (s *Store) persistNewKEMKey(path string) (*mlkem.DecapsulationKey768, error
 	return dk, nil
 }
 
-func (s *Store) buildEncryptedEnvelope(plaintext []byte) (encryptedEnvelope, error) {
+func (s *Store) buildEncryptedEnvelope(plaintext []byte, serviceID string) (encryptedEnvelope, error) {
 	if isPQPermitted() {
-		kemCt, nonce, gcmCt, err := s.encryptPQ(plaintext)
+		kemCt, nonce, gcmCt, err := s.encryptPQHKDF(plaintext, serviceID)
 		if err != nil {
 			return encryptedEnvelope{}, err
 		}
 		return encryptedEnvelope{
-			Version:          envelopeVersionPQ,
-			Algorithm:        algorithmPQKEM,
+			Version:          envelopeVersionPQHKDF,
+			Algorithm:        algorithmPQKEMHKDF,
 			KemCiphertextB64: base64.StdEncoding.EncodeToString(kemCt),
 			NonceB64:         base64.StdEncoding.EncodeToString(nonce),
 			PayloadB64:       base64.StdEncoding.EncodeToString(gcmCt),
 		}, nil
 	}
-	ciphertext, nonce, err := encrypt(plaintext, s.key)
+	aad := aadAgentToken(serviceID)
+	ciphertext, nonce, err := encrypt(plaintext, s.key, aad)
 	if err != nil {
 		return encryptedEnvelope{}, err
 	}
 	return encryptedEnvelope{
-		Version:    envelopeVersionAEAD,
+		Version:    envelopeVersionAEADAAD,
 		Algorithm:  agentTokenEncryptionAlgorithm,
 		NonceB64:   base64.StdEncoding.EncodeToString(nonce),
 		PayloadB64: base64.StdEncoding.EncodeToString(ciphertext),
 	}, nil
 }
 
-func (s *Store) decryptEnvelope(env *encryptedEnvelope, nonce, payload []byte) ([]byte, error) {
-	if env.Version == envelopeVersionPQ && env.Algorithm == algorithmPQKEM {
+//nolint:gocognit // version/algorithm matrix for legacy + modern envelopes
+func (s *Store) decryptEnvelope(env *encryptedEnvelope, nonce, payload []byte, serviceID string) ([]byte, error) {
+	if env.Version == envelopeVersionPQHKDF && env.Algorithm == algorithmPQKEMHKDF {
+		if env.KemCiphertextB64 == "" {
+			return nil, errors.New("missing kem_ciphertext_b64 in pq envelope")
+		}
+		kemCt, err := base64.StdEncoding.DecodeString(env.KemCiphertextB64)
+		if err != nil {
+			return nil, fmt.Errorf("decode envelope kem_ciphertext: %w", err)
+		}
+		return s.decryptPQHKDF(kemCt, nonce, payload, serviceID)
+	}
+	if env.Version == envelopeVersionPQLegacy && env.Algorithm == algorithmPQKEM {
 		if env.KemCiphertextB64 == "" {
 			return nil, errors.New("missing kem_ciphertext_b64 in v2 envelope")
 		}
@@ -555,16 +609,19 @@ func (s *Store) decryptEnvelope(env *encryptedEnvelope, nonce, payload []byte) (
 		if err != nil {
 			return nil, fmt.Errorf("decode envelope kem_ciphertext: %w", err)
 		}
-		return s.decryptPQ(kemCt, nonce, payload)
+		return s.decryptPQLegacy(kemCt, nonce, payload)
 	}
-	if env.Version == envelopeVersionAEAD && env.Algorithm == agentTokenEncryptionAlgorithm {
-		return decrypt(payload, nonce, s.key)
+	if env.Version == envelopeVersionAEADAAD && env.Algorithm == agentTokenEncryptionAlgorithm {
+		return decrypt(payload, nonce, s.key, aadAgentToken(serviceID))
+	}
+	if env.Version == envelopeVersionAEADLegacy && env.Algorithm == agentTokenEncryptionAlgorithm {
+		return decrypt(payload, nonce, s.key, nil)
 	}
 	return nil, errors.New("unsupported secure store envelope")
 }
 
-// encryptPQ encrypts plaintext using ML-KEM-768 + AES-256-GCM; returns (kemCiphertext, nonce, gcmCiphertext).
-func (s *Store) encryptPQ(plaintext []byte) (kemCt, nonce, gcmCt []byte, err error) {
+// encryptPQHKDF encrypts plaintext using ML-KEM-768, HKDF-derived AES-256 key, and AES-GCM with AAD.
+func (s *Store) encryptPQHKDF(plaintext []byte, serviceID string) (kemCt, nonce, gcmCt []byte, err error) {
 	dk, err := s.getOrCreateKEMKey()
 	if err != nil {
 		return nil, nil, nil, err
@@ -572,7 +629,9 @@ func (s *Store) encryptPQ(plaintext []byte) (kemCt, nonce, gcmCt []byte, err err
 	ek := dk.EncapsulationKey()
 	sharedKey, kemCt := ek.Encapsulate()
 	defer zeroBytes(sharedKey)
-	block, err := aes.NewCipher(sharedKey)
+	aesKey := derivePQAESKey(sharedKey, kemCt)
+	defer zeroBytes(aesKey)
+	block, err := aes.NewCipher(aesKey)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("create cipher: %w", err)
 	}
@@ -584,12 +643,41 @@ func (s *Store) encryptPQ(plaintext []byte) (kemCt, nonce, gcmCt []byte, err err
 	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, nil, nil, fmt.Errorf("read nonce: %w", err)
 	}
-	gcmCt = gcm.Seal(nil, nonce, plaintext, nil)
+	aad := aadPQAgentToken(serviceID)
+	gcmCt = gcm.Seal(nil, nonce, plaintext, aad)
 	return kemCt, nonce, gcmCt, nil
 }
 
-// decryptPQ decrypts a v2 envelope payload using the store's ML-KEM key.
-func (s *Store) decryptPQ(kemCt, nonce, gcmCt []byte) ([]byte, error) {
+// decryptPQHKDF decrypts a v4 PQ+HKDF envelope.
+func (s *Store) decryptPQHKDF(kemCt, nonce, gcmCt []byte, serviceID string) ([]byte, error) {
+	dk, err := s.getOrCreateKEMKey()
+	if err != nil {
+		return nil, err
+	}
+	sharedKey, err := dk.Decapsulate(kemCt)
+	if err != nil {
+		return nil, fmt.Errorf("mlkem decapsulate: %w", err)
+	}
+	defer zeroBytes(sharedKey)
+	aesKey := derivePQAESKey(sharedKey, kemCt)
+	defer zeroBytes(aesKey)
+	block, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return nil, fmt.Errorf("create cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("create gcm: %w", err)
+	}
+	plaintext, err := gcm.Open(nil, nonce, gcmCt, aadPQAgentToken(serviceID))
+	if err != nil {
+		return nil, fmt.Errorf("decrypt payload: %w", err)
+	}
+	return plaintext, nil
+}
+
+// decryptPQLegacy decrypts a v2 envelope (direct shared secret as AES key, no AAD).
+func (s *Store) decryptPQLegacy(kemCt, nonce, gcmCt []byte) ([]byte, error) {
 	dk, err := s.getOrCreateKEMKey()
 	if err != nil {
 		return nil, err

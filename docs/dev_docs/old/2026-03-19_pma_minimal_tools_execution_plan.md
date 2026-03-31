@@ -147,7 +147,8 @@ Read-only; no state changes.
 
 ### Task 2: Implement Task MCP Tools (List, Result, Cancel, Logs) in the MCP Gateway
 
-Add MCP tools that mirror the existing orchestrator task API so PMA can list tasks, get task result, cancel a task, and get task logs using the same backend as the User API Gateway (store). `task.get` already exists; add `task.list`, `task.result`, `task.cancel`, `task.logs`.
+Add MCP tools that mirror the existing orchestrator task API so PMA can list tasks, get task result, cancel a task, and get task logs using the same backend as the User API Gateway (store).
+`task.get` already exists; add `task.list`, `task.result`, `task.cancel`, `task.logs`.
 
 #### Task 2 Requirements and Specifications
 
@@ -427,4 +428,4 @@ Update dev_docs and any cross-cutting documentation; produce the final plan comp
 
 ## Implementation Summary (2026-03-21)
 
-See [PMA minimal tools plan completion (archived)](../2026-03-29_review_consolidated_summary.md) and [PMA minimal tools task 5 report (archived)](../2026-03-29_review_consolidated_summary.md).
+See [PMA minimal tools plan completion (archived)](2026-03-29_review_consolidated_summary.md) and [PMA minimal tools task 5 report (archived)](2026-03-29_review_consolidated_summary.md).

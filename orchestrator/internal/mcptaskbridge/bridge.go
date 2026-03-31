@@ -118,7 +118,7 @@ func intArg(args map[string]interface{}, key string) int {
 }
 
 // ListTasksForUser lists tasks for a user (same semantics as GET /v1/tasks).
-func ListTasksForUser(ctx context.Context, store database.Store, userID uuid.UUID, limit, offset int, statusFilter, cursor string) (userapi.ListTasksResponse, error) {
+func ListTasksForUser(ctx context.Context, store database.TaskStore, userID uuid.UUID, limit, offset int, statusFilter, cursor string) (userapi.ListTasksResponse, error) {
 	var zero userapi.ListTasksResponse
 	effectiveOffset := offset
 	tasks, err := store.ListTasksByUser(ctx, userID, limit+1, effectiveOffset)
@@ -147,13 +147,14 @@ func ListTasksForUser(ctx context.Context, store database.Store, userID uuid.UUI
 }
 
 // TaskResultForUser builds GET /v1/tasks/{id}/result payload.
-func TaskResultForUser(ctx context.Context, store database.Store, taskID uuid.UUID) (userapi.TaskResultResponse, error) {
+// limit and offset select a page of jobs (see database.DefaultJobPageLimit / MaxJobPageLimit).
+func TaskResultForUser(ctx context.Context, store database.TaskStore, taskID uuid.UUID, limit, offset int) (userapi.TaskResultResponse, error) {
 	var zero userapi.TaskResultResponse
 	task, err := store.GetTaskByID(ctx, taskID)
 	if err != nil {
 		return zero, err
 	}
-	jobs, err := store.GetJobsByTaskID(ctx, task.ID)
+	jobs, total, err := store.ListJobsForTask(ctx, task.ID, limit, offset)
 	if err != nil {
 		return zero, err
 	}
@@ -162,18 +163,25 @@ func TaskResultForUser(ctx context.Context, store database.Store, taskID uuid.UU
 		jobResponses = append(jobResponses, JobToResponse(job))
 	}
 	out := userapi.TaskResultResponse{
-		TaskID: task.ID.String(),
-		Status: TaskStatusToSpec(task.Status),
-		Jobs:   jobResponses,
+		TaskID:     task.ID.String(),
+		Status:     TaskStatusToSpec(task.Status),
+		Jobs:       jobResponses,
+		TotalCount: int(total),
+		NextCursor: "",
 	}
 	if strings.TrimSpace(task.PlanningState) != "" {
 		out.PlanningState = task.PlanningState
+	}
+	if int64(offset)+int64(len(jobs)) < total && len(jobs) > 0 {
+		next := offset + len(jobs)
+		out.NextOffset = &next
+		out.NextCursor = strconv.Itoa(next)
 	}
 	return out, nil
 }
 
 // CancelTask mirrors POST /v1/tasks/{id}/cancel (task status + non-terminal jobs canceled).
-func CancelTask(ctx context.Context, store database.Store, taskID uuid.UUID) error {
+func CancelTask(ctx context.Context, store database.TaskStore, taskID uuid.UUID) error {
 	if err := store.UpdateTaskStatus(ctx, taskID, models.TaskStatusCanceled); err != nil {
 		return err
 	}
@@ -212,8 +220,8 @@ func AggregateLogsFromJobs(jobs []*models.Job, stream string) (stdout, stderr st
 	return outStd.String(), outErr.String()
 }
 
-// TaskLogsForUser builds GET /v1/tasks/{id}/logs payload.
-func TaskLogsForUser(ctx context.Context, store database.Store, taskID uuid.UUID, stream string) (userapi.TaskLogsResponse, error) {
+// TaskLogsForUser builds GET /v1/tasks/{id}/logs payload. Logs are aggregated only for the requested job page.
+func TaskLogsForUser(ctx context.Context, store database.TaskStore, taskID uuid.UUID, stream string, limit, offset int) (userapi.TaskLogsResponse, error) {
 	var zero userapi.TaskLogsResponse
 	if stream == "" {
 		stream = streamParamAll
@@ -222,14 +230,22 @@ func TaskLogsForUser(ctx context.Context, store database.Store, taskID uuid.UUID
 	if err != nil {
 		return zero, err
 	}
-	jobs, err := store.GetJobsByTaskID(ctx, task.ID)
+	jobs, total, err := store.ListJobsForTask(ctx, task.ID, limit, offset)
 	if err != nil {
 		return zero, err
 	}
 	stdout, stderr := AggregateLogsFromJobs(jobs, stream)
-	return userapi.TaskLogsResponse{
-		TaskID: task.ID.String(),
-		Stdout: stdout,
-		Stderr: stderr,
-	}, nil
+	out := userapi.TaskLogsResponse{
+		TaskID:     task.ID.String(),
+		Stdout:     stdout,
+		Stderr:     stderr,
+		TotalCount: int(total),
+		NextCursor: "",
+	}
+	if int64(offset)+int64(len(jobs)) < total && len(jobs) > 0 {
+		next := offset + len(jobs)
+		out.NextOffset = &next
+		out.NextCursor = strconv.Itoa(next)
+	}
+	return out, nil
 }

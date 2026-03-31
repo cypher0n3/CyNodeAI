@@ -52,8 +52,10 @@ A single Cynork command, `cynork stack ps`, would present a **normalized, repo-a
 
 ## Relationship to Other Commands
 
-- **`cynork status`:** Continues to mean gateway (and optionally aggregated backend) health via HTTP. `stack ps` does not call `gateway_url` for its primary data path.
-- **`cynork nodes` (when implemented):** Lists **registered** nodes and server-side fields. `stack ps` lists **this host's** processes and **this machine's** compose project, which may disagree with registration (for example node down but compose still up).
+- **`cynork status`:** Continues to mean gateway (and optionally aggregated backend) health via HTTP.
+  `stack ps` does not call `gateway_url` for its primary data path.
+- **`cynork nodes` (when implemented):** Lists **registered** nodes and server-side fields.
+  `stack ps` lists **this host's** processes and **this machine's** compose project, which may disagree with registration (for example node down but compose still up).
 
 ## Proposed Command Surface
 

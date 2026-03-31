@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/gormmodel"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
@@ -30,8 +31,53 @@ func normalizeTaskName(s string) string {
 	return s
 }
 
+// ensureUniqueTaskSummaryForUser picks a free summary for the user (base or base-2, base-3, …).
+func (db *DB) ensureUniqueTaskSummaryForUser(ctx context.Context, createdBy *uuid.UUID, base string) (string, error) {
+	var raw []string
+	if err := db.db.WithContext(ctx).Model(&TaskRecord{}).
+		Where("created_by = ? AND (summary = ? OR summary LIKE ?)", createdBy, base, base+"-%").
+		Pluck("summary", &raw).Error; err != nil {
+		return "", wrapErr(err, "list task summaries for uniqueness")
+	}
+	re := regexp.MustCompile(`^` + regexp.QuoteMeta(base) + `(-[0-9]+)?$`)
+	taken := make(map[string]struct{})
+	for _, s := range raw {
+		if re.MatchString(s) {
+			taken[s] = struct{}{}
+		}
+	}
+	if _, exists := taken[base]; !exists {
+		return base, nil
+	}
+	for n := 2; ; n++ {
+		cand := fmt.Sprintf("%s-%d", base, n)
+		if _, exists := taken[cand]; !exists {
+			return cand, nil
+		}
+	}
+}
+
 // CreateTask creates a new task. If taskName is non-nil and non-empty after normalize, it is used as summary and made unique per user; otherwise task_name_###.
+//
+//nolint:dupl // same transaction wrapper pattern as workflow lease acquire (intentional).
 func (db *DB) CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt string, taskName *string, projectID ...*uuid.UUID) (*models.Task, error) {
+	var out *models.Task
+	err := db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		d := &DB{db: tx, workerBearerKey: db.workerBearerKey}
+		t, err := d.createTaskCore(ctx, createdBy, prompt, taskName, projectID...)
+		if err != nil {
+			return err
+		}
+		out = t
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (db *DB) createTaskCore(ctx context.Context, createdBy *uuid.UUID, prompt string, taskName *string, projectID ...*uuid.UUID) (*models.Task, error) {
 	var effectiveProjectID *uuid.UUID
 	if len(projectID) > 0 {
 		effectiveProjectID = projectID[0]
@@ -47,15 +93,10 @@ func (db *DB) CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt strin
 		}
 		summary = fmt.Sprintf("task_name_%03d", count+1)
 	} else if createdBy != nil {
-		// Ensure uniqueness: if same user has a task with this summary, append -2, -3, ...
-		base := summary
-		for n := 2; ; n++ {
-			var exists int64
-			_ = db.db.WithContext(ctx).Model(&TaskRecord{}).Where("created_by = ? AND summary = ?", createdBy, summary).Limit(1).Count(&exists).Error
-			if exists == 0 {
-				break
-			}
-			summary = fmt.Sprintf("%s-%d", base, n)
+		var err error
+		summary, err = db.ensureUniqueTaskSummaryForUser(ctx, createdBy, summary)
+		if err != nil {
+			return nil, err
 		}
 	}
 	record := &TaskRecord{
@@ -103,6 +144,23 @@ func (db *DB) GetOrCreateDefaultProjectForUser(ctx context.Context, userID uuid.
 // GetTaskByID retrieves a task by ID.
 func (db *DB) GetTaskByID(ctx context.Context, id uuid.UUID) (*models.Task, error) {
 	return getDomainByID(db, ctx, id, "get task by id", (*TaskRecord).ToTask)
+}
+
+// getTasksByIDs loads tasks by primary key in one query. IDs missing from the result were not found.
+func (db *DB) getTasksByIDs(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]*models.Task, error) {
+	if len(ids) == 0 {
+		return map[uuid.UUID]*models.Task{}, nil
+	}
+	var records []TaskRecord
+	if err := db.db.WithContext(ctx).Where("id IN ?", ids).Find(&records).Error; err != nil {
+		return nil, wrapErr(err, "get tasks by ids")
+	}
+	out := make(map[uuid.UUID]*models.Task, len(records))
+	for i := range records {
+		t := records[i].ToTask()
+		out[t.ID] = t
+	}
+	return out, nil
 }
 
 // GetTaskBySummary retrieves the most recently created task matching summary for the given user.
@@ -264,21 +322,75 @@ func (db *DB) GetJobByID(ctx context.Context, id uuid.UUID) (*models.Job, error)
 	return getDomainByID(db, ctx, id, "get job by id", (*JobRecord).ToJob)
 }
 
-// GetJobsByTaskID retrieves all jobs for a task.
-func (db *DB) GetJobsByTaskID(ctx context.Context, taskID uuid.UUID) ([]*models.Job, error) {
+const (
+	// DefaultJobPageLimit is the default page size for ListJobsForTask when limit <= 0.
+	DefaultJobPageLimit = 50
+	// MaxJobPageLimit is the maximum page size for ListJobsForTask.
+	MaxJobPageLimit = 100
+	jobFetchChunk   = 100
+)
+
+func (db *DB) listJobsPage(ctx context.Context, taskID uuid.UUID, limit, offset int) ([]*models.Job, error) {
+	if limit <= 0 {
+		limit = DefaultJobPageLimit
+	}
+	if offset < 0 {
+		offset = 0
+	}
 	var records []*JobRecord
 	err := db.db.WithContext(ctx).
 		Where("task_id = ?", taskID).
 		Order("created_at ASC").
+		Limit(limit).
+		Offset(offset).
 		Find(&records).Error
 	if err != nil {
-		return nil, wrapErr(err, "get jobs by task id")
+		return nil, wrapErr(err, "list jobs page")
 	}
 	jobs := make([]*models.Job, len(records))
 	for i, r := range records {
 		jobs[i] = r.ToJob()
 	}
 	return jobs, nil
+}
+
+// ListJobsForTask returns one page of jobs for a task (created_at ASC) and the total job count.
+// limit<=0 uses DefaultJobPageLimit; limit is clamped to MaxJobPageLimit.
+func (db *DB) ListJobsForTask(ctx context.Context, taskID uuid.UUID, limit, offset int) ([]*models.Job, int64, error) {
+	var total int64
+	if err := db.db.WithContext(ctx).Model(&JobRecord{}).Where("task_id = ?", taskID).Count(&total).Error; err != nil {
+		return nil, 0, wrapErr(err, "count jobs for task")
+	}
+	if limit <= 0 {
+		limit = DefaultJobPageLimit
+	}
+	if limit > MaxJobPageLimit {
+		limit = MaxJobPageLimit
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	jobs, err := db.listJobsPage(ctx, taskID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	return jobs, total, nil
+}
+
+// GetJobsByTaskID retrieves all jobs for a task by paging internally (bounded query size per round-trip).
+func (db *DB) GetJobsByTaskID(ctx context.Context, taskID uuid.UUID) ([]*models.Job, error) {
+	var all []*models.Job
+	for offset := 0; ; offset += jobFetchChunk {
+		jobs, err := db.listJobsPage(ctx, taskID, jobFetchChunk, offset)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, jobs...)
+		if len(jobs) < jobFetchChunk {
+			break
+		}
+	}
+	return all, nil
 }
 
 // UpdateJobStatus updates a job's status.

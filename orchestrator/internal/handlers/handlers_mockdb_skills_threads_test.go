@@ -447,7 +447,7 @@ func TestOpenAIChatHandler_NewThread_CreatesThread(t *testing.T) {
 		t.Fatalf("thread_id is not a valid UUID: %v", err)
 	}
 	// Verify thread was created by checking that ListChatMessages succeeds for the returned ID.
-	_, listErr := db.ListChatMessages(context.Background(), threadUUID, 0)
+	_, _, listErr := db.ListChatMessages(context.Background(), threadUUID, 0, 0)
 	if listErr != nil {
 		t.Errorf("thread %s not found after creation: %v", threadUUID, listErr)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -62,17 +63,6 @@ func TestToolCallHandler_SkillsCreate_UserNotFound(t *testing.T) {
 	callToolHandlerWithStore(t, mock, body, http.StatusNotFound)
 }
 
-func TestToolCallHandler_SkillsList_Success(t *testing.T) {
-	mock := testutil.NewMockDB()
-	user, _ := mock.CreateUser(context.Background(), "u", nil)
-	mock.AddUser(user)
-	body := `{"tool_name":"skills.list","arguments":{"user_id":"` + user.ID.String() + `"}}`
-	code, _ := callToolHandlerWithStoreAndBody(t, mock, body)
-	if code != http.StatusOK {
-		t.Fatalf("got status %d", code)
-	}
-}
-
 func TestToolCallHandler_SkillsList_WithScopeAndOwner(t *testing.T) {
 	mock := testutil.NewMockDB()
 	user, _ := mock.CreateUser(context.Background(), "u", nil)
@@ -90,6 +80,50 @@ func TestToolCallHandler_SkillsList_WithScopeAndOwner(t *testing.T) {
 	}
 	if out["skills"] == nil {
 		t.Error("expected skills key")
+	}
+}
+
+func TestToolCallHandler_SkillsList_PaginationMetadata(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	for i := 0; i < 3; i++ {
+		_, _ = mock.CreateSkill(context.Background(), fmt.Sprintf("s%d", i), "# c", "user", &user.ID, false)
+	}
+	body := `{"tool_name":"skills.list","arguments":{"user_id":"` + user.ID.String() + `","limit":1,"offset":0}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d", code)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["total_count"] == nil {
+		t.Errorf("expected total_count: %+v", out)
+	}
+}
+
+func TestToolCallHandler_SkillsList_OKAndInvalidCursor(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	uid := user.ID.String()
+	cases := []struct {
+		name string
+		body string
+		want int
+	}{
+		{"success", `{"tool_name":"skills.list","arguments":{"user_id":"` + uid + `"}}`, http.StatusOK},
+		{"invalid_cursor", `{"tool_name":"skills.list","arguments":{"user_id":"` + uid + `","cursor":"x"}}`, http.StatusBadRequest},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			code, _ := callToolHandlerWithStoreAndBody(t, mock, c.body)
+			if code != c.want {
+				t.Fatalf("got status %d want %d", code, c.want)
+			}
+		})
 	}
 }
 
