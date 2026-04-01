@@ -2,18 +2,28 @@
 
 - [Document Overview](#document-overview)
 - [Capability Parity With CLI](#capability-parity-with-cli)
+  - [Traces to Requirements](#traces-to-requirements)
 - [Primary Use Cases](#primary-use-cases)
 - [Security Model](#security-model)
   - [Security Model Applicable Requirements](#security-model-applicable-requirements)
 - [Authentication and Authorization](#authentication-and-authorization)
+- [NATS WebSocket Transport](#nats-websocket-transport)
+  - [Session Lifecycle Over NATS](#session-lifecycle-over-nats)
+  - [Chat Streaming Over NATS](#chat-streaming-over-nats)
+  - [Fallback Behavior](#fallback-behavior)
+  - [NATS WebSocket Transport Traces To](#nats-websocket-transport-traces-to)
 - [Credential Management](#credential-management)
   - [Credential Management Applicable Requirements](#credential-management-applicable-requirements)
 - [Preferences Management](#preferences-management)
   - [Preferences Management Applicable Requirements](#preferences-management-applicable-requirements)
 - [System Settings Management](#system-settings-management)
+  - [System Settings Management Requirements Traces](#system-settings-management-requirements-traces)
 - [Skills Management](#skills-management)
+  - [Skills Management Requirements Traces](#skills-management-requirements-traces)
 - [Personas Management](#personas-management)
+  - [Personas Management Requirements Traces](#personas-management-requirements-traces)
 - [Project Management](#project-management)
+  - [Project Management Requirements Traces](#project-management-requirements-traces)
 - [Node Management](#node-management)
   - [Node Management Applicable Requirements](#node-management-applicable-requirements)
 - [Implementation Specification (Nuxt 4)](#implementation-specification-nuxt-4)
@@ -29,6 +39,7 @@
   - [Deployment Options Applicable Requirements](#deployment-options-applicable-requirements)
 - [API Surface](#api-surface)
 - [API Documentation (Swagger UI)](#api-documentation-swagger-ui)
+  - [API Documentation (Swagger UI) Requirements Traces](#api-documentation-swagger-ui-requirements-traces)
 - [Audit and Change History](#audit-and-change-history)
 - [MVP Scope](#mvp-scope)
 
@@ -93,6 +104,39 @@ The User API Gateway MUST authenticate all web console requests (see [REQ-WEBCON
 The gateway MUST authorize actions using access control and user context.
 Implementation MUST support at least: local username and password authentication for initial deployments.
 Enterprise SSO (OIDC/SAML) MAY be supported as a future extension.
+
+## NATS WebSocket Transport
+
+- Spec ID: `CYNAI.WEBCON.NatsWebSocketTransport` <a id="spec-cynai-webcon-natswebsockettransport"></a>
+
+The Web Console connects to NATS via WebSocket for session lifecycle signaling and chat streaming.
+This replaces HTTP/SSE as the primary real-time transport for interactive sessions.
+See [`docs/tech_specs/nats_messaging.md`](nats_messaging.md) for the full NATS subject taxonomy, authentication model, and payload schemas.
+
+After authenticating via the gateway HTTP API, the login response includes a `nats` configuration block containing the NATS WebSocket URL (`websocket_url`), session-scoped JWT, JWT expiry, and optional TLS CA.
+The Web Console connects to the NATS WebSocket endpoint using the URL and JWT from the `nats` block.
+The Web Console MUST NOT hardcode NATS connection details (host, port, path); each login yields the current configuration from the orchestrator.
+See [CYNAI.USRGWY.NatsClientCredentials](nats_messaging.md#spec-cynai-usrgwy-natsclientcredentials) for the full schema and [CYNAI.ORCHES.NatsWebSocketListener](nats_messaging.md#spec-cynai-orches-natswebsocketlistener) for the WebSocket listener configuration.
+
+### Session Lifecycle Over NATS
+
+- The Web Console publishes `session.attached` on NATS connection, `session.activity` at `T_heartbeat` cadence during user interaction, and `session.detached` on logout or tab close.
+- Subject patterns and payload schemas are identical to the cynork client.
+
+### Chat Streaming Over NATS
+
+- To send a chat message, the Web Console publishes a `chat.request` message to `cynode.chat.request.<session_id>`.
+- The Web Console subscribes to `cynode.chat.stream.<session_id>.>`, `cynode.chat.done.<session_id>.>`, and `cynode.chat.amendment.<session_id>.>` for token streaming, completion, and redaction amendments.
+- The token delta model (visible text, thinking, tool calls, amendments) is the same as the cynork TUI; only the transport changes from SSE to NATS WebSocket messages.
+
+### Fallback Behavior
+
+- If the NATS WebSocket connection is unavailable or cannot be established, the Web Console falls back to HTTP/SSE via the user-gateway for chat streaming and the gateway publishes session activity on its behalf.
+- The Web Console displays a connection status indicator when NATS is disconnected.
+
+### NATS WebSocket Transport Traces To
+
+- [REQ-ORCHES-0188](../requirements/orches.md#req-orches-0188)
 
 ## Credential Management
 

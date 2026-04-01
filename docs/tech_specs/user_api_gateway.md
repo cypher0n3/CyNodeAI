@@ -18,6 +18,9 @@
   - [Support for `cynork` Chat Slash Commands Requirements Traces](#support-for-cynork-chat-slash-commands-requirements-traces)
 - [Authentication and Auditing](#authentication-and-auditing)
   - [PMA Provisioning on Session Establishment](#pma-provisioning-on-session-establishment)
+  - [NATS Credential Issuance](#nats-credential-issuance)
+  - [Session Activity Publishing](#session-activity-publishing)
+  - [HTTP/SSE Backward Compatibility for Chat Streaming](#httpsse-backward-compatibility-for-chat-streaming)
   - [Authentication and Auditing Requirements Traces](#authentication-and-auditing-requirements-traces)
 - [Web Console](#web-console)
   - [Web Console Requirements Traces](#web-console-requirements-traces)
@@ -353,6 +356,37 @@ The gateway MUST NOT require the user to send a chat message or first PMA-backed
 #### PMA Provisioning on Session Establishment Requirements Traces
 
 - [REQ-USRGWY-0161](../requirements/usrgwy.md#req-usrgwy-0161)
+
+### NATS Credential Issuance
+
+- Spec ID: `CYNAI.USRGWY.NatsCredentialIssuance` <a id="spec-cynai-usrgwy-natscredentialissuance"></a>
+
+On successful authentication, the gateway returns a `nats` configuration block in the login response containing all details the client needs to connect to NATS.
+The gateway obtains the NATS server URL and TLS material from the orchestrator; no NATS connection details are hardcoded on clients.
+See [CYNAI.USRGWY.NatsClientCredentials](nats_messaging.md#spec-cynai-usrgwy-natsclientcredentials) for the full schema and credential model.
+
+- The login response `nats` object includes: server URL (`url`), session-scoped JWT (`jwt`), JWT expiry (`jwt_expires_at`), optional WebSocket URL (`websocket_url`), and optional TLS CA (`ca_bundle_pem`).
+- The NATS JWT grants publish and subscribe permissions scoped to the authenticated session's subjects (session lifecycle + chat streaming).
+- JWT expiry is tied to the refresh token lifetime.
+- On logout or session revocation, the gateway publishes the JWT to the NATS account revocation list so the NATS server disconnects the client immediately.
+- On token refresh, the gateway returns an updated `nats` block with a new JWT (and potentially updated connection details) if the previous JWT is near expiry.
+
+### Session Activity Publishing
+
+The user-gateway publishes session activity to NATS on behalf of HTTP-only API clients that do not connect to NATS directly (e.g., Open WebUI, webhook consumers, API scripts).
+NATS-connected clients (cynork, Web Console) publish session lifecycle messages directly to NATS; the gateway does NOT publish on their behalf.
+See [CYNAI.USRGWY.NatsSessionActivityPublisher](nats_messaging.md#spec-cynai-usrgwy-natssessionactivitypublisher) for the full contract.
+
+### HTTP/SSE Backward Compatibility for Chat Streaming
+
+- Spec ID: `CYNAI.USRGWY.HttpSseBackwardCompat` <a id="spec-cynai-usrgwy-httpssebackwardcompat"></a>
+
+The gateway maintains the existing HTTP/SSE chat streaming path for API clients that do not support NATS (e.g., Open WebUI, external API consumers, automated scripts).
+
+- HTTP-only clients continue to use `POST /v1/chat/completions` with `stream=true` and receive SSE responses.
+- For HTTP-only chat requests, the gateway subscribes to the NATS token stream for the corresponding session and re-encodes tokens as SSE events for the HTTP response.
+- This path is functionally equivalent to the current SSE behavior; NATS clients bypass it entirely.
+- The gateway determines transport mode per session based on whether NATS credentials were issued and the client has an active NATS connection.
 
 ### Authentication and Auditing Requirements Traces
 

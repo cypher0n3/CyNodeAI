@@ -5,6 +5,7 @@
   - [Node Manager Shutdown](#node-manager-shutdown)
   - [Orchestrator Shutdown Notification](#orchestrator-shutdown-notification)
 - [Managed Service Containers](#managed-service-containers)
+  - [NATS Connection and Chat Bridge for Managed Services](#nats-connection-and-chat-bridge-for-managed-services)
 - [Worker Proxy Bidirectional (Managed Agents)](#worker-proxy-bidirectional-managed-agents)
   - [Agent Network Restriction (Security Boundary)](#agent-network-restriction-security-boundary)
   - [Worker Proxy Normative Behavior](#worker-proxy-normative-behavior)
@@ -19,6 +20,7 @@
   - [Unified UDS Path (Agent and Sandbox Containers) Requirements Traces](#unified-uds-path-agent-and-sandbox-containers-requirements-traces)
 - [Node-Local Inference and Sandbox Workflow](#node-local-inference-and-sandbox-workflow)
   - [Node-Local Inference Applicable Requirements](#node-local-inference-applicable-requirements)
+  - [SBA Inference Proxy Capture and Reporting](#sba-inference-proxy-capture-and-reporting)
 - [Node Sandbox MCP Exposure](#node-sandbox-mcp-exposure)
   - [Node Sandbox MCP Exposure Applicable Requirements](#node-sandbox-mcp-exposure-applicable-requirements)
   - [Node-Local Agent Sandbox Control (Low-Latency Path)](#node-local-agent-sandbox-control-low-latency-path)
@@ -144,6 +146,49 @@ PMA as managed service (normative):
 - PMA is a core system feature and is always required.
 - The orchestrator MUST instruct a worker to run **one or more** PMA managed service instances (one **per session binding** per [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)); each instance has a distinct `service_id`.
 - The worker MUST start, supervise, and keep each configured PMA instance running per desired state (see [REQ-WORKER-0176](../requirements/worker.md#req-worker-0176)).
+
+### NATS Connection and Chat Bridge for Managed Services
+
+- Spec ID: `CYNAI.WORKER.NatsChatBridge` <a id="spec-cynai-worker-natschatbridge"></a>
+
+The worker authenticates with the orchestrator via HTTP(S) during registration, receives a NATS JWT from the orchestrator as part of the bootstrap response, and then connects to NATS for all subsequent real-time communication (chat streaming, session activity, config notifications).
+PMA remains UDS-only (per [CYNAI.WORKER.AgentNetworkRestriction](#spec-cynai-worker-agentnetworkrestriction)); the worker is the NATS boundary.
+See [`docs/tech_specs/nats_messaging.md`](nats_messaging.md) for the full subject taxonomy and payload schemas.
+
+#### NATS Connection Lifecycle
+
+- During [registration and bootstrap](#spec-cynai-worker-registrationandbootstrap), the worker authenticates with the orchestrator via HTTP(S) using the pre-shared key (existing flow).
+- The orchestrator returns a `nats` configuration block in the bootstrap payload containing the server URL, a node-scoped NATS JWT, JWT expiry, and optional TLS/subject overrides.
+  See [`node_bootstrap_payload_v1`](worker_node_payloads.md#spec-cynai-worker-payload-bootstrap-v1) for the full schema and [NATS Authentication and Credentials](nats_messaging.md#nats-authentication-and-credentials) for the credential model.
+- The worker connects to NATS using the provided URL and JWT.
+  The `NATS_URL` environment variable is accepted as a fallback only when the bootstrap payload omits the `nats` block (e.g. legacy orchestrator).
+- After NATS connection, the worker uses NATS for chat bridging, config notifications, and session activity relay.
+  HTTP(S) to the orchestrator is retained only for registration, config fetch, and capability reporting.
+- If the NATS connection drops, the worker reconnects with bounded backoff.
+  The HTTP-based config poll remains as a fallback for NATS downtime.
+- On NATS JWT expiry or rotation, the worker requests a refreshed JWT from the orchestrator via HTTP and reconnects.
+
+#### Chat Bridge Behavior
+
+The bridge preserves token-by-token streaming: each token delta produced by PMA becomes a discrete NATS message delivered to the client in real-time.
+Clients subscribe to `cynode.chat.stream.<session_id>.>` and `cynode.chat.done.<session_id>.>` (permissions granted by their session JWT) and see tokens arrive with the same granularity as the current HTTP/SSE path.
+
+- For each managed PMA instance with an active session binding, the worker subscribes to `cynode.chat.request.<session_id>`.
+- On receipt of a `chat.request` NATS message, the worker:
+  1. Extracts the chat completion payload.
+  2. Forwards the request to PMA via the existing UDS HTTP proxy (`POST /internal/chat/completion` with `stream: true`).
+  3. Reads the NDJSON token stream from PMA incrementally -- one token delta per NDJSON line.
+  4. As each token delta arrives, immediately publishes it as a `chat.stream` message to `cynode.chat.stream.<session_id>.<message_id>`.
+     The client receives each `chat.stream` message as soon as the NATS server delivers it (typically sub-millisecond after publish).
+  5. On stream completion, publishes `chat.done` to `cynode.chat.done.<session_id>.<message_id>`.
+- If PMA returns an error, the worker publishes an error event on `chat.done` with error details.
+- The worker MUST NOT buffer or batch token deltas; each delta is published as its own NATS message the instant it is read from UDS.
+- When a managed PMA instance is stopped or removed, the worker unsubscribes from the corresponding `chat.request` subject.
+
+#### NATS Chat Bridge Requirements Traces
+
+- [REQ-ORCHES-0188](../requirements/orches.md#req-orches-0188)
+- [REQ-WORKER-0176](../requirements/worker.md#req-worker-0176)
 
 ## Worker Proxy Bidirectional (Managed Agents)
 
@@ -1042,6 +1087,7 @@ Required flow
   - orchestrator base URL and required service endpoints
   - trust material (e.g. CA bundle or pinned certificate), when applicable
   - pull endpoints and credentials required for orchestrator-provided services
+  - full NATS configuration (`nats` object): server URL, node-scoped NATS JWT, JWT expiry, optional TLS CA, and optional subject overrides (see [NATS Connection and Chat Bridge](#spec-cynai-worker-natschatbridge) and [`node_bootstrap_payload_v1`](worker_node_payloads.md#spec-cynai-worker-payload-bootstrap-v1))
 
 ### Orchestrator Registration Retry
 
@@ -1155,6 +1201,7 @@ Required behavior (when `policy.updates.enable_dynamic_config=true`)
 
 - The orchestrator MUST version node configuration payloads.
 - The node MUST poll for configuration updates or receive them via a push channel.
+  When NATS is deployed, the node subscribes to config change notifications ([CYNAI.WORKER.NatsConfigNotificationSubscriber](nats_messaging.md#spec-cynai-worker-natsconfignotificationsubscriber)) for near-zero-latency config push; polling remains as fallback.
 - The node MUST apply configuration updates atomically where possible and MUST roll back on failure.
 - The node MUST acknowledge applied configuration version to the orchestrator.
 - The node MUST request a configuration refresh on startup and when capability reports change.

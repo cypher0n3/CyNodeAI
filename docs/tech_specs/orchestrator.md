@@ -25,6 +25,7 @@
   - [Greedy PMA Provisioning on User Login](#greedy-pma-provisioning-on-user-login)
   - [Stale PMA Lifecycle and Teardown](#stale-pma-lifecycle-and-teardown)
   - [Managed Services Related Documents](#managed-services-related-documents)
+  - [NATS Chat Stream Observer](#nats-chat-stream-observer)
   - [Project Manager Model (Startup Selection and Warmup)](#project-manager-model-startup-selection-and-warmup)
 - [API Egress Server](#api-egress-server)
 - [Web Egress Proxy](#web-egress-proxy)
@@ -383,6 +384,7 @@ Normative behavior
 - The orchestrator MUST identify **stale** PMA instances using policy that includes at least: **session ended**, **user logout**, **idle timeout**, **credential expiry** or **rotation supersession** with no active replacement for that binding, and **orphaned** instances when clients disconnect per product rules.
 - The orchestrator MUST update **desired state** so workers **stop** removed PMA managed services (remove `service_id` from `managed_services.services[]` or set an explicit stopped/removed directive per worker contract) and MUST **invalidate** associated PMA MCP credentials at the gateway.
 - The orchestrator SHOULD run reconciliation on a **periodic** schedule and on relevant **session lifecycle** events so teardown is timely.
+- When NATS is deployed, the orchestrator subscribes to session activity subjects ([CYNAI.ORCHES.NatsSessionActivityConsumer](nats_messaging.md#spec-cynai-orches-natssessionactivityconsumer)) for event-driven idle detection; the periodic scanner remains as a safety net.
 
 #### Stale PMA Lifecycle and Teardown Requirements Traces
 
@@ -392,9 +394,31 @@ Normative behavior
 ### Managed Services Related Documents
 
 - [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md) (readiness and PMA startup)
-- [`docs/tech_specs/worker_node.md`](worker_node.md) (managed service containers and worker proxy bidirectional)
+- [`docs/tech_specs/worker_node.md`](worker_node.md) (managed service containers, worker proxy bidirectional, and NATS chat bridge)
+- [`docs/tech_specs/nats_messaging.md`](nats_messaging.md) (NATS subjects, streams, consumers, and payloads)
+
 External provider calls MUST use API Egress and SHOULD use agent-specific routing preferences.
 See [`docs/tech_specs/external_model_routing.md`](external_model_routing.md) and [`docs/tech_specs/api_egress_server.md`](api_egress_server.md).
+
+### NATS Chat Stream Observer
+
+- Spec ID: `CYNAI.ORCHES.NatsChatObserver` <a id="spec-cynai-orches-natschatobserver"></a>
+
+The orchestrator subscribes to NATS chat streaming subjects as a non-blocking observer for persistence, redaction, and auditing.
+The orchestrator does NOT mediate or gate the token stream; clients receive tokens directly from the worker bridge.
+See [CYNAI.ORCHES.NatsChatObserver](nats_messaging.md#spec-cynai-orches-natschatobserver) for the full consumer contract.
+
+- Subscribe to `cynode.chat.stream.>`, `cynode.chat.done.>`, and `cynode.chat.request.>`.
+- **Persistence**: Accumulate streamed tokens per `message_id`; on `chat.done`, persist the full message to Postgres.
+- **Redaction**: After stream completion, run post-stream redaction on the accumulated content.
+  If redaction produces changes, publish `chat.amendment` to `cynode.chat.amendment.<session_id>.<message_id>` with the redacted content.
+  The client applies amendments to update displayed content.
+- **Tool-call auditing**: Observe tool-call tokens in the stream for audit logging.
+
+#### NATS Chat Stream Observer Requirements Traces
+
+- [REQ-ORCHES-0188](../requirements/orches.md#req-orches-0188)
+- [REQ-ORCHES-0191](../requirements/orches.md#req-orches-0191)
 
 ### Project Manager Model (Startup Selection and Warmup)
 

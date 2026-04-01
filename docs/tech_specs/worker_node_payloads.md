@@ -252,6 +252,15 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
 - `trust` (object, optional)
   - `ca_bundle_pem` (string, optional)
   - `pinned_spki_sha256` (string, optional)
+- `nats` (object, optional)
+  - Present when the deployment includes a NATS message bus.
+    The worker uses these fields to establish its NATS connection (see [CYNAI.WORKER.NatsChatBridge](worker_node.md#spec-cynai-worker-natschatbridge)).
+  - `url` (string) -- NATS server URL (`nats://host:port`).
+  - `jwt` (string) -- Node-scoped NATS JWT (system account, worker role).
+  - `jwt_expires_at` (string) -- RFC 3339 UTC expiry of the JWT.
+  - `websocket_url` (string, optional) -- NATS WebSocket URL, if exposed.
+  - `ca_bundle_pem` (string, optional) -- CA bundle for TLS verification of the NATS server, when the NATS server uses a private CA distinct from the orchestrator trust material.
+  - `subjects` (object, optional) -- Explicit subject prefixes the worker should use (future extensibility); when omitted the worker uses the default subject taxonomy from [`nats_messaging.md`](nats_messaging.md).
 - `initial_config_version` (string, optional)
 - `pull_credentials` (object, optional)
   - `sandbox_registries` (array of objects, optional): rank-ordered; each has `registry_url` (string), optional `username`, `password`, `token`, `expires_at`

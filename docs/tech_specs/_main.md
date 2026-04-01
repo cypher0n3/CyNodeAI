@@ -16,6 +16,7 @@
   - [Model Lifecycle](#model-lifecycle)
   - [AI Skills](#ai-skills)
   - [Agents Specification](#agents-specification)
+  - [Messaging and Transport](#messaging-and-transport)
   - [Bootstrap Configurations](#bootstrap-configurations)
 
 ## Document Overview
@@ -133,6 +134,10 @@ It uses a central orchestrator to coordinate node-local workers, sandboxed execu
 - CyNode SBA (`cynode-sba`): [`docs/tech_specs/cynode_sba.md`](cynode_sba.md)
 - CyNode Step Executor (`cynode-sse`): [`docs/tech_specs/cynode_step_executor.md`](cynode_step_executor.md)
 - Workflow MVP: [`docs/tech_specs/workflow_mvp.md`](workflow_mvp.md)
+
+### Messaging and Transport
+
+- NATS messaging: [`docs/tech_specs/nats_messaging.md`](nats_messaging.md)
 
 ### Bootstrap Configurations
 
