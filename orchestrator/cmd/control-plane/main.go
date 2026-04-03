@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/natsutil"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/artifacts"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
@@ -24,9 +25,11 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/handlers"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/mcpgateway"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/middleware"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/natsjwt"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/nodetelemetry"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/pmasubprocess"
 	readinesscheck "github.com/cypher0n3/cynodeai/orchestrator/internal/readiness"
+	"github.com/nats-io/nats.go"
 )
 
 // testShutdownTimeout, when set by tests, overrides the server shutdown timeout.
@@ -114,6 +117,10 @@ func runMainWithContext(ctx context.Context, store database.Store) int {
 	slog.SetDefault(logger)
 
 	cfg := config.LoadOrchestratorConfig()
+	if err := config.ResolveNATSSeeds(cfg); err != nil {
+		logger.Error("nats dev seeds", "error", err)
+		return 1
+	}
 	if err := config.ValidateSecrets(cfg); err != nil {
 		logger.Error("invalid configuration", "error", err)
 		return 1
@@ -196,7 +203,29 @@ func registerMCPToolRoute(mux *http.ServeMux, store database.Store, logger *slog
 	mux.HandleFunc("POST /v1/mcp/tools/call", mcpgateway.ToolCallHandler(store, logger, mcpToolAuth))
 }
 
+func connectControlPlaneNATS(
+	ctx context.Context,
+	store database.Store,
+	cfg *config.OrchestratorConfig,
+	natsIss *natsjwt.Issuer,
+	logger *slog.Logger,
+) *nats.Conn {
+	nc, js, nerr := handlers.IssueControlPlaneNATSConnection(cfg.NATSDialURL(), natsIss)
+	if nerr != nil {
+		logger.Warn("nats control-plane connect", "error", nerr)
+		return nil
+	}
+	if nc == nil {
+		return nil
+	}
+	handlers.SetJetStreamForConfigBump(js)
+	go handlers.RunSessionActivityConsumer(ctx, store, nc, logger)
+	return nc
+}
+
 // run bootstraps admin, starts the HTTP server and dispatcher until ctx is canceled. Used by main and tests.
+//
+//nolint:gocognit,gocyclo // control-plane wiring: NATS consumer, routes, PMA subprocess, graceful shutdown
 func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConfig, logger *slog.Logger) error {
 	if err := bootstrapAdminUser(ctx, store, cfg.BootstrapAdminPassword, logger); err != nil {
 		return err
@@ -209,7 +238,25 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 		cfg.JWTNodeDuration,
 	)
 
-	nodeHandler := handlers.NewNodeHandler(store, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, cfg.WorkerAPIBearerToken, cfg.WorkerAPITargetURL, cfg.WorkerInternalAgentToken, logger)
+	var natsIss *natsjwt.Issuer
+	if cfg.NATSAccountSeed != "" && cfg.NATSAccountSigningSeed != "" {
+		var nerr error
+		natsIss, nerr = natsjwt.NewIssuer(cfg.NATSAccountSeed, cfg.NATSAccountSigningSeed)
+		if nerr != nil {
+			logger.Warn("nats jwt issuer disabled", "error", nerr)
+			natsIss = nil
+		}
+	}
+
+	var cpNatsConn *nats.Conn
+	defer func() {
+		if cpNatsConn != nil {
+			_ = natsutil.CloseConn(cpNatsConn)
+		}
+	}()
+	cpNatsConn = connectControlPlaneNATS(ctx, store, cfg, natsIss, logger)
+
+	nodeHandler := handlers.NewNodeHandler(store, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, cfg.WorkerAPIBearerToken, cfg.WorkerAPITargetURL, cfg.WorkerInternalAgentToken, natsIss, cfg.NATSClientURL, cfg.NATSWebSocketURL, logger)
 	authMiddleware := middleware.NewAuthMiddleware(jwtManager, logger)
 	workflowHandler := handlers.NewWorkflowHandler(store, logger)
 	workflowAuth := middleware.RequireWorkflowRunnerAuth(cfg.WorkflowRunnerBearerToken)

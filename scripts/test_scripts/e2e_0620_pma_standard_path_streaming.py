@@ -25,7 +25,7 @@ class TestPMAStandardPathStreaming(unittest.TestCase):
     """E2E: PMA standard path via gateway SSE (iteration_start, thinking, tool_progress)."""
 
     tags = ["suite_orchestrator", "pma_inference", "inference", "streaming"]
-    prereqs = ["gateway", "config", "auth", "ollama"]
+    prereqs = ["gateway", "config", "auth", "ollama", "pma_chat"]
 
     def setUp(self):
         ok, detail = helpers.prepare_e2e_cynork_auth()

@@ -159,6 +159,19 @@ type errReader struct{}
 
 func (errReader) Read([]byte) (int, error) { return 0, errors.New("read") }
 
+func TestEmitInternalOrchestratorProxyAudit_NilLogger(t *testing.T) {
+	emitInternalOrchestratorProxyAudit(
+		context.Background(),
+		embedInternalProxyConfig{},
+		"s",
+		"http://up",
+		"POST",
+		"/p",
+		http.StatusOK,
+		time.Now(),
+	)
+}
+
 func TestWriteManagedProxyJSONFromUpstream_OK(t *testing.T) {
 	rec := httptest.NewRecorder()
 	resp := &http.Response{

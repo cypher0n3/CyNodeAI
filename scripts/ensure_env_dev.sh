@@ -22,3 +22,4 @@ umask 077
 } >"$root/.env.dev"
 chmod 600 "$root/.env.dev" 2>/dev/null || true
 echo "[INFO] Created $root/.env.dev with a random secure-store master key for local dev."
+echo "[INFO] Optional vars: see $root/.env.example (NATS_DEV_* seeds, JWT, PSK, …)."

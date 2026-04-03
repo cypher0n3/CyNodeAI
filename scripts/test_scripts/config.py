@@ -42,6 +42,20 @@ CONTROL_PLANE_API = os.environ.get("CONTROL_PLANE_API") or (
     f"http://{_E2E_LOOPBACK}:{CONTROL_PLANE_PORT}"
 )
 
+# NATS (orchestrator docker-compose; monitoring on host for E2E)
+NATS_MONITOR_PORT = _env_int("NATS_MONITOR_PORT", 8222)
+NATS_MONITOR_URL = os.environ.get("NATS_MONITOR_URL") or (
+    f"http://{_E2E_LOOPBACK}:{NATS_MONITOR_PORT}"
+)
+NATS_CLIENT_PORT = _env_int("NATS_CLIENT_PORT", 4222)
+NATS_CLIENT_URL = os.environ.get("NATS_CLIENT_URL") or (
+    f"nats://{_E2E_LOOPBACK}:{NATS_CLIENT_PORT}"
+)
+NATS_WEBSOCKET_PORT = _env_int("NATS_WEBSOCKET_PORT", 8223)
+NATS_WEBSOCKET_URL = os.environ.get("NATS_WEBSOCKET_URL") or (
+    f"ws://{_E2E_LOOPBACK}:{NATS_WEBSOCKET_PORT}/nats"
+)
+
 # API egress (orchestrator/docker-compose.yml profile optional; port must match compose)
 API_EGRESS_PORT = int(os.environ.get("API_EGRESS_PORT", "12084"))
 API_EGRESS_API = os.environ.get("API_EGRESS_API") or f"http://{_E2E_LOOPBACK}:{API_EGRESS_PORT}"

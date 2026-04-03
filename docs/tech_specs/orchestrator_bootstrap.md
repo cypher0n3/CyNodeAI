@@ -16,6 +16,7 @@
   - [Inference Path](#inference-path)
   - [Worker Reports Ready](#worker-reports-ready)
   - [PMA Instance Per Session Binding](#pma-instance-per-session-binding)
+  - [PMA Warm Pool](#pma-warm-pool)
   - [PMA Startup](#pma-startup)
   - [PMA Inference Capability Check (Readiness)](#pma-inference-capability-check-readiness)
   - [PMA Informs Orchestrator](#pma-informs-orchestrator)
@@ -210,6 +211,7 @@ Orchestrator deployments MUST support auto-start on the host so that the orchest
 - [REQ-ORCHES-0151](../requirements/orches.md#req-orches-0151)
 - [REQ-ORCHES-0188](../requirements/orches.md#req-orches-0188)
 - [REQ-ORCHES-0189](../requirements/orches.md#req-orches-0189)
+- [REQ-ORCHES-0192](../requirements/orches.md#req-orches-0192)
 - [REQ-WORKER-0176](../requirements/worker.md#req-worker-0176)
 
 The orchestrator cannot report fully ready until at least one inference path exists, until at least one PMA instance has informed the orchestrator that it is online, and until the **PMA inference capability check** succeeds for the bootstrap path (see [PMA Inference Capability Check (Readiness)](#pma-inference-capability-check-readiness)).
@@ -232,8 +234,8 @@ The orchestrator cannot report fully ready until at least one inference path exi
 
 Normative model
 
-- The orchestrator MUST provision **one `cynode-pma` managed service instance per session binding** (each instance has a distinct `service_id` in `managed_services.services[]`).
-- Each instance receives its own identity-bound worker-proxy UDS mount and **at most one** active PMA MCP credential binding in the secure store for that `service_id`, matching [CYNAI.MCPGAT.PmaSessionTokens](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens).
+- The orchestrator MUST provision **one `cynode-pma` managed service row per session binding** at a time: each binding is assigned a distinct pool `service_id` (pattern `pma-pool-<n>`) in `managed_services.services[]` while the binding is active.
+- Each pool slot used by a binding receives its own identity-bound worker-proxy UDS mount and **at most one** active PMA MCP credential binding in the secure store for that `service_id`, matching [CYNAI.MCPGAT.PmaSessionTokens](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens).
 - **Project Analyst Agent (PAA)** remains a separate concern: **PAA** uses `cynode-pma` in `project_analyst` mode for **task-scoped** verification and analysis; it is **not** a replacement for a per-session Project Manager PMA instance.
 
 #### PMA Instance per Session Binding Requirements Traces
@@ -241,10 +243,32 @@ Normative model
 - [REQ-ORCHES-0188](../requirements/orches.md#req-orches-0188)
 - [REQ-WORKER-0176](../requirements/worker.md#req-worker-0176)
 
+### PMA Warm Pool
+
+- Spec ID: `CYNAI.ORCHES.PmaWarmPool` <a id="spec-cynai-orches-pmawarmpool"></a>
+
+Normative model
+
+- The orchestrator MUST include **N** PMA entries in managed-services desired state with `service_id` values `pma-pool-0` through `pma-pool-(N-1)` where **N** is derived from: (count of active session bindings whose refresh session is valid) **plus** a minimum spare count **F** (operator-configurable, default **1**), bounded by a maximum slot count **M** (operator-configurable, default **16**), and **N** MUST be at least **1** when PMA managed services are enabled on the host worker.
+- Entries for slots **not** currently assigned to an active binding MUST be emitted **without** per-session container environment (`CYNODE_SESSION_ID`, `CYNODE_USER_ID`, `CYNODE_BINDING_KEY`, and related keys) so the worker runs **idle** PMA containers that are already warm for fast assignment.
+- When greedy provisioning assigns a binding to slot **k**, the orchestrator MUST update that binding's `service_id` to `pma-pool-k` and MUST include session env on the corresponding managed-service row; the worker MUST reconcile (restart) that container when env changes.
+- When a binding is torn down, the orchestrator MUST remove session env from that slot (return it to the idle pool) and MAY shrink **N** when the formula allows, so workers stop excess `pma-pool-*` containers.
+
+Environment variables (orchestrator):
+
+- `PMA_WARM_POOL_MIN_FREE` - non-negative integer spare slots (default `1`).
+- `PMA_WARM_POOL_MAX_SLOTS` - maximum **N** (default `16`).
+
+#### PMA Warm Pool Requirements Traces
+
+- [REQ-ORCHES-0192](../requirements/orches.md#req-orches-0192)
+- [REQ-ORCHES-0188](../requirements/orches.md#req-orches-0188)
+- [REQ-ORCHES-0150](../requirements/orches.md#req-orches-0150)
+
 ### PMA Startup
 
 - The orchestrator MUST start the Project Manager Agent by instructing a worker node to run **at least one** PMA **managed service instance** when the **first** inference path becomes available: either the first worker node has reported ready and is inference-capable, or the orchestrator has an LLM API key configured for PMA via API Egress.
-  That bootstrap instance is used for readiness and the **PMA inference capability check**; subsequent sessions each receive **additional** PMA instances per [PMA Instance Per Session Binding](#pma-instance-per-session-binding).
+  The first warm-pool slot (typically `pma-pool-0`) satisfies bootstrap readiness and the **PMA inference capability check**; additional slots are added per [PMA Warm Pool](#pma-warm-pool) and [PMA Instance Per Session Binding](#pma-instance-per-session-binding).
 - The orchestrator MUST deliver PMA start bundles via node configuration (managed services desired state); see [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `managed_services`.
 - The orchestrator MUST NOT instruct a node to start PMA before at least one of these conditions is satisfied.
 
@@ -270,7 +294,7 @@ Traces To: [REQ-ORCHES-0189](../requirements/orches.md#req-orches-0189), [REQ-BO
 
 - The orchestrator MUST ensure at least one inference path is available before reporting ready.
   If no worker has reported ready with inference and no PMA-facing LLM API key is configured, the orchestrator MUST refuse to enter a ready state.
-- The orchestrator MUST start **at least one** PMA instance when the first inference path exists (worker ready and inference-capable, or API Egress key for PMA); additional PMA instances are provisioned **per session binding**.
+- The orchestrator MUST start **at least one** PMA instance when the first inference path exists (worker ready and inference-capable, or API Egress key for PMA); the orchestrator MUST maintain a **warm pool** per [PMA Warm Pool](#pma-warm-pool) and assign slots per session binding.
 - The orchestrator MUST NOT report ready until the bootstrap PMA instance is online and reachable **and** the **PMA inference capability check** has succeeded (per [PMA Inference Capability Check (Readiness)](#pma-inference-capability-check-readiness)).
   PMA is a core system feature and is always required; disabling PMA is not supported.
 - **PMA inference preference:** PMA configuration MUST prefer local inference via worker nodes unless overridden by user-specified config (e.g. `agents.project_manager.model.selection.execution_mode=force_external`).

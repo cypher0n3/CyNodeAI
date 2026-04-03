@@ -15,12 +15,51 @@ import urllib.request
 from scripts.test_scripts import config
 from scripts.test_scripts.e2e_config_file import ensure_minimal_gateway_config_yaml
 from scripts.test_scripts.e2e_json import parse_json_loose
+from scripts.test_scripts import e2e_container_runtime
 from scripts.test_scripts import e2e_json_helpers
+from scripts.test_scripts import helpers_http
 import scripts.test_scripts.e2e_state as state
+
+gateway_request = helpers_http.gateway_request
+gateway_post_task_no_inference = helpers_http.gateway_post_task_no_inference
+mcp_tool_call = helpers_http.mcp_tool_call
+mcp_pm_agent_bearer_token = helpers_http.mcp_pm_agent_bearer_token
 
 parse_json_safe = e2e_json_helpers.parse_json_safe
 jq_get = e2e_json_helpers.jq_get
 get_sba_job_result = e2e_json_helpers.get_sba_job_result
+fetch_gateway_refresh_tokens = e2e_json_helpers.fetch_gateway_refresh_tokens
+
+container_runtime_ps_available = e2e_container_runtime.container_runtime_ps_available
+list_runtime_managed_pma_container_names = (
+    e2e_container_runtime.list_runtime_managed_pma_container_names
+)
+count_runtime_pma_pool_container_names = (
+    e2e_container_runtime.count_runtime_pma_pool_container_names
+)
+count_runtime_pma_sb_container_names = e2e_container_runtime.count_runtime_pma_sb_container_names
+wait_for_runtime_pma_sb_count_at_least = (
+    e2e_container_runtime.wait_for_runtime_pma_sb_count_at_least
+)
+runtime_pma_pool_container_name_set = e2e_container_runtime.runtime_pma_pool_container_name_set
+runtime_pma_sb_container_name_set = e2e_container_runtime.runtime_pma_sb_container_name_set
+wait_for_at_least_new_pma_sb_container_names = (
+    e2e_container_runtime.wait_for_at_least_new_pma_sb_container_names
+)
+wait_until_managed_container_names_absent = (
+    e2e_container_runtime.wait_until_managed_container_names_absent
+)
+wait_until_some_pma_sb_names_removed = (
+    e2e_container_runtime.wait_until_some_pma_sb_names_removed
+)
+wait_until_runtime_pma_sb_empty = e2e_container_runtime.wait_until_runtime_pma_sb_empty
+wait_until_runtime_pma_pool_at_most = e2e_container_runtime.wait_until_runtime_pma_pool_at_most
+wait_until_runtime_pma_sb_count_below = (
+    e2e_container_runtime.wait_until_runtime_pma_sb_count_below
+)
+pma_pool_login_unlikely_to_add_new_names = (
+    e2e_container_runtime.pma_pool_login_unlikely_to_add_new_names
+)
 
 # Cynork persists gateway_url + TUI prefs in config.yaml only (no secrets).
 # E2E stores access/refresh tokens beside the config file for subprocess env injection.
@@ -112,151 +151,6 @@ def fetch_gateway_login_tokens(timeout=30):
         return None, None
 
 
-def container_runtime_ps_available():
-    """True if ``podman ps`` or ``docker ps`` succeeds (exit 0)."""
-    for bin_name in ("podman", "docker"):
-        try:
-            proc = subprocess.run(
-                [bin_name, "ps"],
-                capture_output=True,
-                text=True,
-                timeout=15,
-                check=False,
-            )
-        except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-            continue
-        if proc.returncode == 0:
-            return True
-    return False
-
-
-def list_runtime_managed_pma_container_names():
-    """Running container names matching ``cynodeai-managed-pma`` (podman or docker).
-
-    Node-manager does not upsert these into worker telemetry ``container_inventory``;
-    this matches observable state in orchestrator_bootstrap / per-session PMA specs.
-    """
-    needle = "cynodeai-managed-pma"
-    names = []
-    for bin_name in ("podman", "docker"):
-        try:
-            proc = subprocess.run(
-                [bin_name, "ps", "--format", "{{.Names}}"],
-                capture_output=True,
-                text=True,
-                timeout=15,
-                check=False,
-            )
-        except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-            continue
-        if proc.returncode != 0 or not (proc.stdout or "").strip():
-            continue
-        for line in proc.stdout.splitlines():
-            n = line.strip()
-            if needle in n:
-                names.append(n)
-        if names:
-            return sorted(set(names))
-    return []
-
-
-def count_runtime_pma_sb_container_names(names):
-    """Count per-session PMA containers (``…-managed-pma-sb-…``)."""
-    if not names:
-        return 0
-    return sum(1 for n in names if "cynodeai-managed-pma-sb-" in n)
-
-
-def wait_for_runtime_pma_sb_count_at_least(min_sb, timeout_sec=180, poll_sec=4):
-    """Poll until ``count_runtime_pma_sb_container_names`` >= min_sb.
-
-    Returns (ok, last_names, last_sb_count).
-    """
-    deadline = time.monotonic() + float(timeout_sec)
-    last_names = []
-    last_sb = 0
-    while time.monotonic() < deadline:
-        last_names = list_runtime_managed_pma_container_names()
-        last_sb = count_runtime_pma_sb_container_names(last_names)
-        if last_sb >= min_sb:
-            return True, last_names, last_sb
-        time.sleep(float(poll_sec))
-    return False, last_names, last_sb
-
-
-def runtime_pma_sb_container_name_set():
-    """Set of running container names (``cynodeai-managed-pma-sb-*``)."""
-    return {
-        n
-        for n in list_runtime_managed_pma_container_names()
-        if "cynodeai-managed-pma-sb-" in n
-    }
-
-
-def wait_for_at_least_new_pma_sb_container_names(
-    before_names, min_new, timeout_sec=180, poll_sec=4
-):
-    """Poll until at least ``min_new`` new ``pma-sb`` managed containers vs ``before_names``.
-
-    ``before_names`` is a set of full container names. Returns
-    (ok, new_names_set, all_sb_names_set).
-    """
-    deadline = time.monotonic() + float(timeout_sec)
-    before = set(before_names)
-    last_new = set()
-    last_all = set()
-    while time.monotonic() < deadline:
-        last_all = runtime_pma_sb_container_name_set()
-        last_new = last_all - before
-        if len(last_new) >= int(min_new):
-            return True, last_new, last_all
-        time.sleep(float(poll_sec))
-    return False, last_new, last_all
-
-
-def wait_until_managed_container_names_absent(container_names, timeout_sec=180, poll_sec=4):
-    """Poll until none of ``container_names`` appear in ``list_runtime_managed_pma_container_names``."""
-    want_gone = frozenset(str(n).strip() for n in container_names if str(n).strip())
-    if not want_gone:
-        return True
-    deadline = time.monotonic() + float(timeout_sec)
-    while time.monotonic() < deadline:
-        current = set(list_runtime_managed_pma_container_names())
-        if want_gone.isdisjoint(current):
-            return True
-        time.sleep(float(poll_sec))
-    return False
-
-
-def wait_until_some_pma_sb_names_removed(
-    names_before_logout, timeout_sec=180, poll_sec=4
-):
-    """Poll until at least one name in ``names_before_logout`` is gone (logout / teardown).
-
-    ``names_before_logout`` is typically ``new_sb`` from ``wait_for_at_least_new_pma_sb_container_names``.
-    """
-    want = frozenset(str(n).strip() for n in names_before_logout if str(n).strip())
-    if not want:
-        return True
-    deadline = time.monotonic() + float(timeout_sec)
-    while time.monotonic() < deadline:
-        cur = runtime_pma_sb_container_name_set()
-        if not want.issubset(cur):
-            return True
-        time.sleep(float(poll_sec))
-    return False
-
-
-def wait_until_runtime_pma_sb_empty(timeout_sec=180, poll_sec=4):
-    """Poll until no running ``cynodeai-managed-pma-sb-*`` containers (podman/docker ps)."""
-    deadline = time.monotonic() + float(timeout_sec)
-    while time.monotonic() < deadline:
-        if not runtime_pma_sb_container_name_set():
-            return True
-        time.sleep(float(poll_sec))
-    return False
-
-
 def gateway_logout(access_token, refresh_token, timeout=30):
     """POST /v1/auth/logout with JSON body refresh_token; Bearer access_token required.
 
@@ -308,36 +202,26 @@ def gateway_admin_revoke_sessions_for_user(access_token, user_id, timeout=60):
 
 def gateway_admin_revoke_sessions_for_me(access_token, timeout=60):
     """Revoke all sessions for the current user (admin); tears down per-session PMA bindings."""
-    uid = gateway_get_me_user_id(access_token, timeout=timeout)
+    uid = ""
+    for _ in range(4):
+        uid = gateway_get_me_user_id(access_token, timeout=timeout) or ""
+        if uid:
+            break
+        time.sleep(2)
     if not uid:
         return False, 0, "no user id from GET /v1/users/me"
-    return gateway_admin_revoke_sessions_for_user(access_token, uid, timeout=timeout)
-
-
-def fetch_gateway_refresh_tokens(refresh_token, timeout=30):
-    """POST /v1/auth/refresh; return (access_token, refresh_token) or (None, None)."""
-    if not refresh_token or not str(refresh_token).strip():
-        return None, None
-    url = config.USER_API.rstrip("/") + "/v1/auth/refresh"
-    body = json.dumps({"refresh_token": refresh_token}).encode()
-    req = urllib.request.Request(
-        url,
-        data=body,
-        method="POST",
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            if resp.status != 200:
-                return None, None
-            data = json.loads(resp.read().decode())
-            acc = data.get("access_token")
-            ref = data.get("refresh_token")
-            if isinstance(acc, str) and acc.strip():
-                return acc.strip(), ref.strip() if isinstance(ref, str) else None
-            return None, None
-    except (urllib.error.URLError, OSError, json.JSONDecodeError, ValueError, TypeError):
-        return None, None
+    last_st, last_body = 0, ""
+    for _ in range(4):
+        ok, st, body = gateway_admin_revoke_sessions_for_user(
+            access_token, uid, timeout=timeout
+        )
+        if ok:
+            return True, st, body
+        if st:
+            return ok, st, body
+        last_st, last_body = st, body
+        time.sleep(2)
+    return False, last_st, last_body
 
 
 def fetch_gateway_access_token(timeout=30):
@@ -353,6 +237,16 @@ def sync_e2e_gateway_session_from_login(config_path, timeout=30):
         write_e2e_gateway_session(config_path, acc, ref or "")
         return True
     return False
+
+
+def refresh_e2e_gateway_tokens_for_long_suite(config_path, timeout=60):
+    """Replace E2E sidecar with new tokens from POST /v1/auth/login (admin).
+
+    Use immediately before PTY or other tests that start a long gateway chat turn in a
+    hot full-suite run: ``ensure_valid_auth_session`` may leave a JWT that expires before
+    the turn finishes, which surfaces as ``[CYNRK_AUTH_RECOVERY_READY]`` in the TUI.
+    """
+    return sync_e2e_gateway_session_from_login(config_path, timeout=timeout)
 
 
 def prepare_e2e_cynork_auth():
@@ -532,97 +426,6 @@ def run_curl(method, url, data=None, headers=None, timeout=30):
         method, url, data=data, headers=headers, timeout=timeout
     )
     return 200 <= code < 300, body
-
-
-def mcp_tool_call(tool_name, arguments=None, timeout=30, bearer_token=None):
-    """POST control-plane ``/v1/mcp/tools/call``.
-
-    When ``bearer_token`` is set, sends ``Authorization: Bearer …`` (PM or sandbox agent token).
-    Return (http_status, response_body_str).
-    """
-    url = config.CONTROL_PLANE_API.rstrip("/") + "/v1/mcp/tools/call"
-    payload = {"tool_name": tool_name, "arguments": arguments or {}}
-    body = json.dumps(payload).encode("utf-8")
-    headers = {"Content-Type": "application/json"}
-    if bearer_token:
-        headers["Authorization"] = "Bearer " + str(bearer_token).strip()
-    req = urllib.request.Request(
-        url,
-        data=body,
-        method="POST",
-        headers=headers,
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
-            return resp.status, raw
-    except urllib.error.HTTPError as e:
-        try:
-            raw = e.read().decode("utf-8", errors="replace") if e.fp else ""
-            return e.code, raw
-        finally:
-            e.close()
-
-    except (urllib.error.URLError, OSError, ValueError):
-        return 0, ""
-
-
-def mcp_pm_agent_bearer_token():
-    """Return PM agent bearer for MCP when configured (matches full-demo / compose defaults).
-
-    When any MCP agent token is set on the control-plane, direct ``mcp_tool_call`` requests
-    must send ``Authorization``. Use this for catalog tests that need the Project Manager
-    allowlist. Returns None when unset (legacy dev with no agent tokens).
-    """
-    t = (config.WORKER_INTERNAL_AGENT_TOKEN or "").strip()
-    return t if t else None
-
-
-def gateway_request(method, path, access_token, json_body=None, timeout=30):
-    """Call user gateway path with Bearer token; return ``(status, body_str)``.
-
-    ``path`` is e.g. ``/v1/tasks``.
-    """
-    url = config.USER_API.rstrip("/") + path
-    headers = {"Content-Type": "application/json"} if json_body is not None else {}
-    if access_token:
-        headers["Authorization"] = "Bearer " + access_token.strip()
-    data = json.dumps(json_body).encode("utf-8") if json_body is not None else None
-    req = urllib.request.Request(url, data=data, method=method, headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status, resp.read().decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as e:
-        try:
-            raw = e.read().decode("utf-8", errors="replace") if e.fp else ""
-            return e.code, raw
-        finally:
-            e.close()
-
-    except (urllib.error.URLError, OSError, ValueError):
-        return 0, ""
-
-
-def gateway_post_task_no_inference(token, prompt, timeout=60, retries=4):
-    """POST ``/v1/tasks`` with ``use_inference: false``; retry on transport failure (st==0).
-
-    Long local E2E runs (MCP matrices, UDS proxy) can leave the next gateway call timing out;
-    a short backoff reduces flakes.
-    """
-    last_st, last_body = 0, ""
-    for _ in range(retries):
-        st, body = gateway_request(
-            "POST",
-            "/v1/tasks",
-            token,
-            {"prompt": prompt, "use_inference": False},
-            timeout=timeout,
-        )
-        if st > 0:
-            return st, body
-        last_st, last_body = st, body
-        time.sleep(2)
-    return last_st, last_body
 
 
 def read_refresh_token_from_config(config_path):
@@ -838,8 +641,11 @@ def wait_for_gateway_readyz(timeout_sec=30):
 def wait_for_pma_chat_ready(timeout_sec=120, poll_interval=5):
     """Wait until gateway accepts PMA chat (POST /v1/chat/completions returns 2xx not 503).
     Logs in via cynork to get a token, then polls until PM agent is available or timeout.
+    Keeps the login config for the whole wait so we can ``auth refresh`` periodically
+    (greedy PMA rebind when worker snapshots catch up after long Ollama/model load).
     Return True when chat returns 2xx; False on timeout or auth failure.
     """
+    body = '{"model":"cynodeai.pm","messages":[{"role":"user","content":"hi"}]}'
     with tempfile.TemporaryDirectory(prefix="cynodeai_e2e_wait_chat_") as tmpdir:
         config_path = os.path.join(tmpdir, "config.yaml")
         ok, _, _ = run_cynork(
@@ -849,26 +655,29 @@ def wait_for_pma_chat_ready(timeout_sec=120, poll_interval=5):
         )
         if not ok:
             return False
-        token = read_token_from_config(config_path)
-        if not token:
-            return False
-    body = '{"model":"cynodeai.pm","messages":[{"role":"user","content":"hi"}]}'
-    headers = {"Authorization": f"Bearer {token}"}
-    deadline = time.monotonic() + timeout_sec
-    while time.monotonic() < deadline:
-        code, _ = run_curl_with_status(
-            "POST",
-            f"{config.USER_API}/v1/chat/completions",
-            data=body,
-            headers=headers,
-            timeout=15,
-        )
-        if 200 <= code < 300:
-            return True
-        # Retry on 5xx (model loading, PMA proxy, upstream); fail fast on 4xx (auth, bad request).
-        if 400 <= code < 500:
-            return False
-        time.sleep(poll_interval)
+        deadline = time.monotonic() + timeout_sec
+        attempt = 0
+        while time.monotonic() < deadline:
+            token = read_token_from_config(config_path)
+            if not token:
+                return False
+            headers = {"Authorization": f"Bearer {token}"}
+            code, _ = run_curl_with_status(
+                "POST",
+                f"{config.USER_API}/v1/chat/completions",
+                data=body,
+                headers=headers,
+                timeout=15,
+            )
+            if 200 <= code < 300:
+                return True
+            if 400 <= code < 500:
+                return False
+            attempt += 1
+            # Every ~60s refresh session to re-run greedy PMA slot pick vs worker snapshot.
+            if not attempt % max(1, 60 // max(poll_interval, 1)):
+                run_cynork(["auth", "refresh"], config_path, timeout=30)
+            time.sleep(poll_interval)
     return False
 
 

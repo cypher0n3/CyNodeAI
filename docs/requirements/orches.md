@@ -207,7 +207,7 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
   <a id="req-orches-0149"></a>
 - **REQ-ORCHES-0150:** The orchestrator MUST start the Project Manager Agent (cynode-pma) by instructing a worker node to run **at least one** PMA managed service instance when the first inference path becomes available: either the first worker node has reported ready to the orchestrator and is inference-capable, or the orchestrator has an LLM API key configured for PMA via the API Egress Server.
-  That first instance supports **bootstrap readiness** (see REQ-ORCHES-0189); additional PMA instances are provisioned **per session binding** per REQ-ORCHES-0188.
+  That first instance supports **bootstrap readiness** (see REQ-ORCHES-0189); the orchestrator MUST maintain a **warm pool** of PMA instances per REQ-ORCHES-0192 and MUST assign pool slots to session bindings per REQ-ORCHES-0188.
   The orchestrator MUST deliver PMA start bundles via node configuration managed services desired state.
   The orchestrator MUST NOT instruct a node to start PMA before at least one of these conditions is satisfied.
   [CYNAI.BOOTST.OrchestratorReadinessAndPmaStartup](../tech_specs/orchestrator_bootstrap.md#spec-cynai-bootst-orchestratorreadinessandpmastartup)
@@ -364,14 +364,15 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.MCPGAT.PmaInvocationClass](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmainvocationclass)
   [CYNAI.MCPGAT.PmaSessionTokens](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens)
   <a id="req-orches-0187"></a>
-- **REQ-ORCHES-0188:** The orchestrator MUST provision **one `cynode-pma` managed service instance per session binding** (each instance has a distinct `service_id` and its own worker-proxy UDS identity and credential binding).
+- **REQ-ORCHES-0188:** The orchestrator MUST provision **one `cynode-pma` managed service instance per session binding** (each binding is assigned a distinct pool `service_id` such as `pma-pool-<n>` with its own worker-proxy UDS identity and credential binding).
+  Pool slots are **assigned** to bindings when a session becomes active and are **released** when the binding is torn down; see REQ-ORCHES-0192 for always-on spare capacity.
   The orchestrator MUST NOT rely on a single shared PMA container on a worker node to serve all concurrent user sessions or orchestrator-initiated work.
   The orchestrator MUST route each PMA handoff to the managed service instance **for that session binding**.
   **Project Analyst Agent (PAA)** remains distinct: `cynode-pma` in `project_analyst` mode is used for **task-scoped** verification and analyst work, not as a substitute for per-session PMA Project Manager instances.
   [CYNAI.ORCHES.PmaInstancePerSessionBinding](../tech_specs/orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)
   [CYNAI.WORKER.ManagedServiceContainers](../tech_specs/worker_node.md#spec-cynai-worker-managedservicecontainers)
   <a id="req-orches-0188"></a>
-- **REQ-ORCHES-0189:** When the **first** worker node becomes available with a **local inference** path, the orchestrator MUST direct that worker to start **at least one** PMA managed service instance (bootstrap instance) and MUST run a **PMA inference capability check** **before** treating that worker and the control plane as **fully ready** for normal workload.
+- **REQ-ORCHES-0189:** When the **first** worker node becomes available with a **local inference** path, the orchestrator MUST direct that worker to start **at least one** PMA managed service instance (the first warm-pool slot, typically `pma-pool-0`) and MUST run a **PMA inference capability check** **before** treating that worker and the control plane as **fully ready** for normal workload.
   The capability check MUST include the **function test** defined in [CYNAI.BOOTST.PmaInferenceCapabilityCheck](../tech_specs/orchestrator_bootstrap.md#spec-cynai-bootst-pmainferencecapabilitycheck): direct PMA to execute the **`help.list`** MCP tool call and return the results.
   When readiness relies on **external** PMA inference only (API Egress), the orchestrator MUST still apply an equivalent PMA capability check for any bootstrap PMA instance started on a worker when local inference is configured.
   The orchestrator MUST NOT report `GET /readyz` success until this check passes for the configured inference path.
@@ -389,3 +390,9 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.ORCHES.StalePmaTeardown](../tech_specs/orchestrator.md#spec-cynai-orches-stalepmateardown)
   [CYNAI.ORCHES.PmaInstancePerSessionBinding](../tech_specs/orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)
   <a id="req-orches-0191"></a>
+- **REQ-ORCHES-0192:** The orchestrator MUST maintain a **warm pool** of Project Manager PMA managed service instances on the PMA host worker: desired state MUST include enough `pma-pool-*` slots that **at least one slot is unassigned** (running without per-session `CYNODE_*` container env) whenever the deployment is within configured pool limits, so new interactive sessions do not wait for a cold container image start.
+  The orchestrator MUST size the pool from active session bindings with valid refresh sessions plus a configurable **minimum free** spare count (default one), capped by a configurable **maximum slot** count.
+  When a session binding is released, the orchestrator MUST return that slot to the pool (idle spec) or replace it per teardown policy so the spare capacity invariant can be restored.
+  [CYNAI.ORCHES.PmaWarmPool](../tech_specs/orchestrator_bootstrap.md#spec-cynai-orches-pmawarmpool)
+  [CYNAI.ORCHES.PmaInstancePerSessionBinding](../tech_specs/orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)
+  <a id="req-orches-0192"></a>

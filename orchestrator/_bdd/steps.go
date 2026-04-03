@@ -251,7 +251,7 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 			cfg.JWTNodeDuration,
 		)
 		rateLimiter := auth.NewRateLimiter(cfg.RateLimitPerMinute, time.Minute)
-		authHandler := handlers.NewAuthHandler(db, jwtManager, rateLimiter, nil)
+		authHandler := handlers.NewAuthHandler(db, jwtManager, rateLimiter, nil, "", "", nil)
 		userHandler := handlers.NewUserHandler(db, nil)
 		// Enable mock inference for Chat scenarios so Chat returns immediately; other scenarios get queued tasks.
 		var inferenceURL, inferenceModel string
@@ -269,7 +269,9 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 			inferenceModel = "qwen3.5:0.8b"
 		}
 		taskHandler := handlers.NewTaskHandler(db, nil, inferenceURL, inferenceModel)
-		nodeHandler := handlers.NewNodeHandler(db, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, cfg.WorkerAPIBearerToken, cfg.WorkerAPITargetURL, cfg.WorkerInternalAgentToken, nil)
+		// Do not pass cfg.WorkerAPITargetURL: host env (e.g. after setup-dev) would override node-reported
+		// worker_api.base_url and break scenarios that assert registration persists the node's URL.
+		nodeHandler := handlers.NewNodeHandler(db, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, cfg.WorkerAPIBearerToken, "", cfg.WorkerInternalAgentToken, nil, "", "", nil)
 		authMiddleware := middleware.NewAuthMiddleware(jwtManager, nil)
 
 		mux := http.NewServeMux()
@@ -517,6 +519,15 @@ func sendChatMessage(ctx context.Context, message, model string) error {
 	return nil
 }
 
+// normalizeWorkerAPIBaseURL strips optional Gherkin-style angle brackets around URLs in feature steps.
+func normalizeWorkerAPIBaseURL(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && s[0] == '<' && s[len(s)-1] == '>' {
+		s = strings.TrimSpace(s[1 : len(s)-1])
+	}
+	return s
+}
+
 func nodeRegisterStep(ctx context.Context, slug, advertisedWorkerAPIURL string) error {
 	st := getState(ctx)
 	if st == nil || st.server == nil {
@@ -530,8 +541,8 @@ func nodeRegisterStep(ctx context.Context, slug, advertisedWorkerAPIURL string) 
 		"platform":    map[string]interface{}{"os": "linux", "arch": "amd64"},
 		"compute":     map[string]interface{}{"cpu_cores": 2, "ram_mb": 4096},
 	}
-	if strings.TrimSpace(advertisedWorkerAPIURL) != "" {
-		capability["worker_api"] = map[string]interface{}{"base_url": strings.TrimSpace(advertisedWorkerAPIURL)}
+	if u := normalizeWorkerAPIBaseURL(advertisedWorkerAPIURL); u != "" {
+		capability["worker_api"] = map[string]interface{}{"base_url": u}
 	}
 	body, _ := json.Marshal(map[string]interface{}{
 		"psk":        cfg.NodeRegistrationPSK,
@@ -582,8 +593,8 @@ func nodeRegisterStepWithInferenceAndGPU(ctx context.Context, existingService bo
 			"running":          false,
 		},
 	}
-	if strings.TrimSpace(st.advertisedWorkerAPIURL) != "" {
-		capability["worker_api"] = map[string]interface{}{"base_url": strings.TrimSpace(st.advertisedWorkerAPIURL)}
+	if u := normalizeWorkerAPIBaseURL(st.advertisedWorkerAPIURL); u != "" {
+		capability["worker_api"] = map[string]interface{}{"base_url": u}
 	}
 	if st.registrationGPU != nil {
 		gpuJSON, _ := json.Marshal(st.registrationGPU)

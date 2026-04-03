@@ -980,11 +980,3 @@ func TestRun_PMAStartWhenInferencePathReady_ListNodesFails(t *testing.T) {
 	cancel()
 	<-done
 }
-
-// TestWireArtifactsService_NonDBStore covers wireArtifactsService when the store is not *database.DB (MCP artifact tools cleared).
-func TestWireArtifactsService_NonDBStore(t *testing.T) {
-	got := wireArtifactsService(context.Background(), testutil.NewMockDB(), config.LoadOrchestratorConfig(), slog.Default())
-	if got != nil {
-		t.Fatalf("expected nil when store is not *database.DB, got %v", got)
-	}
-}

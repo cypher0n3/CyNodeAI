@@ -2,11 +2,14 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 )
@@ -17,6 +20,7 @@ func TestGreedyProvision_PersistsBindingAndMCPIntent(t *testing.T) {
 	db := testutil.NewMockDB()
 	uid := uuid.New()
 	rsID := uuid.New()
+	addTestRefreshSession(t, db, uid, rsID, []byte("tok"))
 	if err := GreedyProvisionPMAAfterInteractiveSession(ctx, db, uid, rsID, nil); err != nil {
 		t.Fatalf("GreedyProvisionPMAAfterInteractiveSession: %v", err)
 	}
@@ -25,8 +29,8 @@ func TestGreedyProvision_PersistsBindingAndMCPIntent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSessionBindingByKey: %v", err)
 	}
-	if b.ServiceID != models.PMAServiceIDForBindingKey(key) {
-		t.Fatalf("service_id: %q", b.ServiceID)
+	if b.ServiceID != poolServiceID(0) {
+		t.Fatalf("service_id: %q want %s", b.ServiceID, poolServiceID(0))
 	}
 	issue := LastGreedyPMAIssueForTest()
 	if issue == nil {
@@ -51,6 +55,7 @@ func TestGreedyProvision_BumpsConfigOnPMAHost(t *testing.T) {
 	}
 	uid := uuid.New()
 	rsID := uuid.New()
+	addTestRefreshSession(t, db, uid, rsID, []byte("tok2"))
 	t.Setenv("PMA_HOST_NODE_SLUG", "alpha-node")
 	if err := GreedyProvisionPMAAfterInteractiveSession(ctx, db, uid, rsID, nil); err != nil {
 		t.Fatalf("GreedyProvisionPMAAfterInteractiveSession: %v", err)
@@ -81,10 +86,73 @@ func TestGreedyProvision_InteractiveSessionWithoutChat(t *testing.T) {
 	t.Cleanup(ResetGreedyPMAIssueForTest)
 	ctx := context.Background()
 	db := testutil.NewMockDB()
-	if err := GreedyProvisionPMAAfterInteractiveSession(ctx, db, uuid.New(), uuid.New(), nil); err != nil {
+	uid := uuid.New()
+	rsID := uuid.New()
+	addTestRefreshSession(t, db, uid, rsID, []byte("tok3"))
+	if err := GreedyProvisionPMAAfterInteractiveSession(ctx, db, uid, rsID, nil); err != nil {
 		t.Fatal(err)
 	}
 	if LastGreedyPMAIssueForTest() == nil {
 		t.Fatal("expected binding + MCP intent without any chat handler")
+	}
+}
+
+func TestGreedyProvision_RebindsWhenBoundSlotNotReadyInSnapshot(t *testing.T) {
+	t.Cleanup(ResetGreedyPMAIssueForTest)
+	ctx := context.Background()
+	db := testutil.NewMockDB()
+	nodeID := uuid.New()
+	n := &models.Node{
+		NodeBase: models.NodeBase{NodeSlug: "w1"},
+		ID:       nodeID,
+	}
+	testutil.ApplyDispatchableWorkerFields(&n.NodeBase, "", "")
+	db.AddNode(n)
+	report := nodepayloads.CapabilityReport{
+		ManagedServicesStatus: &nodepayloads.ManagedServicesStatus{
+			Services: []nodepayloads.ManagedServiceStatus{
+				{
+					ServiceID:   poolServiceID(1),
+					ServiceType: "pma",
+					State:       "ready",
+					Endpoints:   []string{"http://p1/proxy"},
+				},
+			},
+		},
+	}
+	raw, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SaveNodeCapabilitySnapshot(ctx, nodeID, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	uid := uuid.New()
+	rsID := uuid.New()
+	addTestRefreshSession(t, db, uid, rsID, []byte("rebind-tok"))
+	lineage := models.SessionBindingLineage{UserID: uid, SessionID: rsID, ThreadID: nil}
+	key := models.DeriveSessionBindingKey(lineage)
+	now := time.Now().UTC()
+	db.SessionBindingsByKey[key] = &models.SessionBinding{
+		SessionBindingBase: models.SessionBindingBase{
+			BindingKey: key,
+			UserID:     uid,
+			SessionID:  rsID,
+			ServiceID:  poolServiceID(0),
+			State:      models.SessionBindingStateActive,
+		},
+		ID:        uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := GreedyProvisionPMAAfterInteractiveSession(ctx, db, uid, rsID, nil); err != nil {
+		t.Fatal(err)
+	}
+	b, err := db.GetSessionBindingByKey(ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.ServiceID != poolServiceID(1) {
+		t.Fatalf("service_id %q want %s (rebind to worker-ready slot)", b.ServiceID, poolServiceID(1))
 	}
 }

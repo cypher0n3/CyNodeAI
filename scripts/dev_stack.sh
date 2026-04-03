@@ -133,6 +133,19 @@ cmd_start() {
   echo "[INFO] Building cynode-pma image..."
   $RUNTIME build -f agents/cmd/cynode-pma/Containerfile -t cynodeai-cynode-pma:dev . || return 1
   compose_env
+  _xdg_cache="${XDG_CACHE_HOME:-$HOME/.cache}"
+  export NATS_DEV_JWT_DIR="${NATS_DEV_JWT_DIR:-$_xdg_cache/cynodeai/nats-dev-jwt}"
+  mkdir -p "$NATS_DEV_JWT_DIR"
+  echo "[INFO] Writing NATS dev JWT bundle to $NATS_DEV_JWT_DIR"
+  (cd "$ROOT" && go run ./orchestrator/cmd/gen-nats-dev-jwt -dir "$NATS_DEV_JWT_DIR") || return 1
+  _nats_seeds_json="${NATS_DEV_SEEDS_FILE:-$_xdg_cache/cynodeai/nats-dev-seeds.json}"
+  if [ -f "$_nats_seeds_json" ]; then
+    NATS_ACCOUNT_SEED="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["cynode_account_seed"])' "$_nats_seeds_json")"
+    NATS_ACCOUNT_SIGNING_SEED="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["cynode_signing_seed"])' "$_nats_seeds_json")"
+    export NATS_ACCOUNT_SEED NATS_ACCOUNT_SIGNING_SEED
+  else
+    echo "[WARN] NATS dev seeds missing at $_nats_seeds_json; compose services may issue JWTs NATS rejects" >&2
+  fi
   echo "[INFO] Orchestrator stack startup..."
   $RUNTIME compose -f "$COMPOSE_FILE" --profile ollama down 2>/dev/null || true
   $RUNTIME rm -f cynodeai-control-plane cynodeai-user-gateway cynodeai-cynode-pma 2>/dev/null || true

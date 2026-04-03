@@ -15,8 +15,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/natsconfig"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
@@ -72,6 +74,31 @@ type BootstrapData struct {
 	ExpiresAt     string
 	NodeReportURL string
 	NodeConfigURL string
+	Nats          *natsconfig.ClientCredentials
+}
+
+// capabilityLoopState holds the latest node config for NATS session relay (updated each capability tick).
+type capabilityLoopState struct {
+	mu  sync.Mutex
+	cfg *nodepayloads.NodeConfigurationPayload
+}
+
+func (s *capabilityLoopState) set(cfg *nodepayloads.NodeConfigurationPayload) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.cfg = cfg
+	s.mu.Unlock()
+}
+
+func (s *capabilityLoopState) get() *nodepayloads.NodeConfigurationPayload {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cfg
 }
 
 // RunOptions allows optional service starters for production; nil means skip (e.g. in tests).
@@ -101,6 +128,8 @@ func Run(ctx context.Context, logger *slog.Logger, cfg *Config) error {
 // registering (see worker_node.md / startup procedure); the script does not poll for control-plane readiness.
 // Per Node Startup Procedure and Node Startup Checks (worker_node.md): the node performs initial
 // startup checks (container runtime, existing inference detection) before registering with the orchestrator.
+//
+//nolint:gocognit,gocyclo // startup sequencing including optional NATS runtime
 func RunWithOptions(ctx context.Context, logger *slog.Logger, cfg *Config, opts *RunOptions) error {
 	if err := cfg.Validate(); err != nil {
 		return err
@@ -139,7 +168,32 @@ func RunWithOptions(ctx context.Context, logger *slog.Logger, cfg *Config, opts 
 		return err
 	}
 
-	return runCapabilityLoop(ctx, logger, cfg, bootstrap, nodeConfig, opts)
+	loopState := &capabilityLoopState{}
+	loopState.set(nodeConfig)
+	nodeID, nidErr := ParseNodeIDFromNodeJWT(bootstrap.NodeJWT)
+	var natsRT *NatsRuntime
+	if bootstrap.Nats != nil && nidErr == nil {
+		var nerr error
+		natsRT, nerr = NewNatsRuntime(ctx, logger, bootstrap, nodeID, cfg.NodeSlug)
+		if nerr != nil {
+			if logger != nil {
+				logger.Warn("nats unavailable", "error", nerr)
+			}
+			natsRT = nil
+		}
+	} else if bootstrap.Nats != nil && nidErr != nil && logger != nil {
+		logger.Warn("nats disabled: could not parse node id from node jwt", "error", nidErr)
+	}
+	var configBump chan struct{}
+	if natsRT != nil {
+		configBump = make(chan struct{}, 1)
+		defer natsRT.Close()
+		go natsRT.RunSessionActivityLoop(ctx, logger, func() *nodepayloads.NodeConfigurationPayload { return loopState.get() })
+		natsRT.StartConfigSubscriber(ctx, logger, configBump)
+		go natsRT.RunJWTRefreshLoop(ctx, logger, cfg, bootstrap)
+	}
+
+	return runCapabilityLoop(ctx, logger, cfg, bootstrap, nodeConfig, opts, loopState, configBump)
 }
 
 // applyConfigAndStartServices starts Worker API and Ollama from opts (if set), then sends config ack.
@@ -520,6 +574,7 @@ func modelsToPullFromConfig(nodeConfig *nodepayloads.NodeConfigurationPayload) [
 	return []string{s}
 }
 
+//nolint:gocognit // branching reflects distinct managed-services reconciliation paths
 func maybeStartManagedServices(ctx context.Context, logger *slog.Logger, nodeConfig *nodepayloads.NodeConfigurationPayload, opts *RunOptions) error {
 	if opts == nil || opts.StartManagedServices == nil {
 		if logger != nil {
@@ -558,7 +613,32 @@ func maybeStartManagedServices(ctx context.Context, logger *slog.Logger, nodeCon
 	return nil
 }
 
-func runCapabilityLoop(ctx context.Context, logger *slog.Logger, cfg *Config, bootstrap *BootstrapData, nodeConfig *nodepayloads.NodeConfigurationPayload, opts *RunOptions) error {
+func reconcileAfterNodeConfigRefresh(
+	ctx context.Context,
+	logger *slog.Logger,
+	cfg *Config,
+	prev, nodeConfig *nodepayloads.NodeConfigurationPayload,
+	opts *RunOptions,
+	loopState *capabilityLoopState,
+) *nodepayloads.NodeConfigurationPayload {
+	if loopState != nil {
+		loopState.set(nodeConfig)
+	}
+	if managedServicesConfigChanged(prev, nodeConfig) {
+		if err := syncManagedServiceAgentTokens(ctx, cfg, nodeConfig, logger); err != nil && logger != nil {
+			logger.Warn("managed service token sync after config change", "error", err)
+		}
+		applyWorkerProxyConfigEnv(nodeConfig)
+	}
+	if inferenceBackendPullSpecChanged(prev, nodeConfig) {
+		maybePullModels(ctx, logger, nodeConfig, opts)
+	}
+	reconcileManagedServices(ctx, logger, nodeConfig, opts)
+	return nodeConfig
+}
+
+//nolint:gocognit // select multiplexes capability tick, optional NATS config bump, and shutdown
+func runCapabilityLoop(ctx context.Context, logger *slog.Logger, cfg *Config, bootstrap *BootstrapData, nodeConfig *nodepayloads.NodeConfigurationPayload, opts *RunOptions, loopState *capabilityLoopState, configBump <-chan struct{}) error {
 	// Report immediately so orchestrator readyz can become 200 without waiting for first tick.
 	if err := reportCapabilities(ctx, cfg, bootstrap, nodeConfig); err != nil {
 		_ = err
@@ -566,6 +646,24 @@ func runCapabilityLoop(ctx context.Context, logger *slog.Logger, cfg *Config, bo
 	ticker := time.NewTicker(cfg.CapabilityReportInterval)
 	defer ticker.Stop()
 	for {
+		if configBump != nil {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-configBump:
+				prev := nodeConfig
+				nodeConfig = refreshNodeConfig(ctx, logger, cfg, bootstrap, nodeConfig)
+				nodeConfig = reconcileAfterNodeConfigRefresh(ctx, logger, cfg, prev, nodeConfig, opts, loopState)
+			case <-ticker.C:
+				if err := reportCapabilities(ctx, cfg, bootstrap, nodeConfig); err != nil {
+					_ = err
+				}
+				prev := nodeConfig
+				nodeConfig = refreshNodeConfig(ctx, logger, cfg, bootstrap, nodeConfig)
+				nodeConfig = reconcileAfterNodeConfigRefresh(ctx, logger, cfg, prev, nodeConfig, opts, loopState)
+			}
+			continue
+		}
 		select {
 		case <-ctx.Done():
 			return nil
@@ -575,16 +673,7 @@ func runCapabilityLoop(ctx context.Context, logger *slog.Logger, cfg *Config, bo
 			}
 			prev := nodeConfig
 			nodeConfig = refreshNodeConfig(ctx, logger, cfg, bootstrap, nodeConfig)
-			if managedServicesConfigChanged(prev, nodeConfig) {
-				if err := syncManagedServiceAgentTokens(ctx, cfg, nodeConfig, logger); err != nil && logger != nil {
-					logger.Warn("managed service token sync after config change", "error", err)
-				}
-				applyWorkerProxyConfigEnv(nodeConfig)
-			}
-			if inferenceBackendPullSpecChanged(prev, nodeConfig) {
-				maybePullModels(ctx, logger, nodeConfig, opts)
-			}
-			reconcileManagedServices(ctx, logger, nodeConfig, opts)
+			nodeConfig = reconcileAfterNodeConfigRefresh(ctx, logger, cfg, prev, nodeConfig, opts, loopState)
 		}
 	}
 }

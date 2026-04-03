@@ -29,7 +29,7 @@ class TestTUIStreamingBehavior(unittest.TestCase):
     """
 
     tags = ["suite_cynork", "tui_pty", "tui", "pma_inference", "streaming"]
-    prereqs = ["gateway", "config", "auth", "ollama"]
+    prereqs = ["gateway", "config", "auth", "ollama", "pma_chat"]
 
     def setUp(self):
         ok, detail = helpers.prepare_e2e_cynork_auth()

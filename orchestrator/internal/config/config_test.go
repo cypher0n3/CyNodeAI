@@ -227,3 +227,18 @@ func TestGetBoolEnv(t *testing.T) {
 		t.Error("getBoolEnv() with unset var = true, want default false")
 	}
 }
+
+func TestNATSDialURL(t *testing.T) {
+	t.Parallel()
+	if got := (*OrchestratorConfig)(nil).NATSDialURL(); got != "" {
+		t.Fatalf("nil config: %q", got)
+	}
+	cfg := &OrchestratorConfig{NATSClientURL: "nats://127.0.0.1:4222"}
+	if got := cfg.NATSDialURL(); got != cfg.NATSClientURL {
+		t.Fatalf("fallback: %q", got)
+	}
+	cfg.NATSServerURL = "nats://nats:4222"
+	if got := cfg.NATSDialURL(); got != "nats://nats:4222" {
+		t.Fatalf("server url: %q", got)
+	}
+}

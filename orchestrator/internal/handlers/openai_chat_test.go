@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/natsutil"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/natsjwt"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 	"github.com/google/uuid"
 )
@@ -577,4 +579,52 @@ func TestTryPMAStream_EarlyExitPaths(t *testing.T) {
 	if h.tryPMAStream(t.Context(), rec, true, EffectiveModelPM, nil, uuid.Nil, &uid, nil, time.Now(), "rid", nil) {
 		t.Fatal("expected false when no PMA endpoint is available")
 	}
+}
+
+func TestOpenAIChatHandler_SetGatewaySessionActivity(t *testing.T) {
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", "")
+	h.SetGatewaySessionActivity(nil)
+}
+
+func TestOpenAIChatHandler_touchPMAModelActivity_publishesSessionActivityToNats(t *testing.T) {
+	nc, js, cleanup := testJetStream(t)
+	defer cleanup()
+	ctx := context.Background()
+	db := testutil.NewMockDB()
+	uid := uuid.New()
+	rsID := uuid.New()
+	lineage := models.SessionBindingLineage{UserID: uid, SessionID: rsID, ThreadID: nil}
+	key := models.DeriveSessionBindingKey(lineage)
+	if _, err := db.UpsertSessionBinding(ctx, lineage, models.PMAServiceIDForBindingKey(key), models.SessionBindingStateActive); err != nil {
+		t.Fatal(err)
+	}
+	g := NewGatewaySessionPublisher(nc, js)
+	h := NewOpenAIChatHandler(db, newTestLogger(), "", "", "")
+	h.SetGatewaySessionActivity(g)
+	sid := rsID.String()
+	subj := "cynode.session.activity." + natsjwt.DefaultTenantID + "." + sid
+	sub, err := js.SubscribeSync(subj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sub.Unsubscribe() }()
+	h.touchPMAModelActivity(ctx, uid)
+	msg, err := sub.NextMsg(3 * time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var env natsutil.Envelope
+	if err := json.Unmarshal(msg.Data, &env); err != nil {
+		t.Fatal(err)
+	}
+	if env.EventType != evSessionActivity {
+		t.Fatalf("event_type %q", env.EventType)
+	}
+}
+
+func TestOpenAIChatHandler_touchPMAModelActivity_noGateway(t *testing.T) {
+	db := testutil.NewMockDB()
+	uid := uuid.New()
+	h := NewOpenAIChatHandler(db, newTestLogger(), "", "", "")
+	h.touchPMAModelActivity(context.Background(), uid)
 }

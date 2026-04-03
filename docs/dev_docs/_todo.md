@@ -2,7 +2,7 @@
 
 ## 1 Immediate (Security and Correctness)
 
-**Status (2026-03-30):** Tracked items below were executed per [_plan_001_immediate.md](_plan_001_immediate.md); see [_plan_001_final_report.md](_plan_001_final_report.md) and per-task `_task*.md` reports in this directory.
+**Status (2026-03-30):** Tracked items below were executed per [_plan_001_immediate.md](old/_plan_001_immediate.md); see [_plan_001_final_report.md](old/_plan_001_final_report.md) and per-task `_task*.md` reports in this directory.
 
 These must be addressed before any production deployment:
 
@@ -23,22 +23,22 @@ These must be addressed before any production deployment:
 12. **Change `RunJobResponse.ExitCode`** from `int` to `*int`. ([Report 5](old/2026-03-29_review_report_5_shared_libs.md))
 13. **Add GitHub Actions CI workflow.** ([Report 6](old/2026-03-29_review_report_6_testing.md))
 
-Plan: [_plan_001_immediate.md](_plan_001_immediate.md)
+Plan: [_plan_001_immediate.md](old/_plan_001_immediate.md)
 
 ## 2 Bugs
 
-Plan: [_plan_002_bugs.md](_plan_002_bugs.md)
+Plan: [_plan_002_bugs.md](old/_plan_002_bugs.md)
 
-- **Bug 3 (`/auth login` thread UX):** Resolved per [_plan_002_bugs.md](_plan_002_bugs.md) Task 1 (logout clears thread id; ensure-thread landmarks).
-  See [_plan_002_bugs_task1_report.md](_plan_002_bugs_task1_report.md).
+- **Bug 3 (`/auth login` thread UX):** Resolved per [_plan_002_bugs.md](old/_plan_002_bugs.md) Task 1 (logout clears thread id; ensure-thread landmarks).
+  See [_plan_002_bugs_task1_report.md](old/_plan_002_bugs_task1_report.md).
   Product follow-up: in-TUI login transcript scope still TBD.
 - **Bug 4 (slash/shell blocked while streaming + queue model):** Resolved per the same plan Task 2 (queue model, send-now, Ctrl+Q).
-  See [_plan_002_bugs_task2_report.md](_plan_002_bugs_task2_report.md).
+  See [_plan_002_bugs_task2_report.md](old/_plan_002_bugs_task2_report.md).
   Follow-up: full draft-queue UI and persistence per spec are not in scope of this plan.
 
 ## 3 Short-Term (High-Severity Issues)
 
-Plan: [_plan_003_short_term.md](_plan_003_short_term.md)
+Plan: [_plan_003_short_term.md](old/_plan_003_short_term.md)
 
 **Status (2026-03-30):** Completed per the plan; see `task1_completion_report.md` through `task12_completion_report.md` and the final report in this directory.
 
@@ -60,9 +60,9 @@ Address within 1-2 sprints (tracking list retained for context):
 
 ## 4 Planned (Medium-Severity Improvements)
 
-Plan: [_plan_004_planned.md](_plan_004_planned.md)
+Plan: [_plan_004_planned.md](old/_plan_004_planned.md)
 
-**Status (2026-03-30):** Completed; see [_plan_004_final_report.md](_plan_004_final_report.md).
+**Status (2026-03-30):** Completed; see [_plan_004_final_report.md](old/_plan_004_final_report.md).
 
 Address within the next release cycle:
 

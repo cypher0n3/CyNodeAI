@@ -182,7 +182,12 @@ func TestServer_Run_ReturnsErrorWhenPublicListenerClosed(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() { done <- srv.Run(ctx) }()
-	time.Sleep(150 * time.Millisecond)
+	// Wait for startPublicListener to assign publicLn (it calls signalReady after assignment).
+	select {
+	case <-srv.readyCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("server did not signal ready")
+	}
 	if srv.publicLn == nil {
 		t.Fatal("public listener not set")
 	}

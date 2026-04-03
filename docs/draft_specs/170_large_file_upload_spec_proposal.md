@@ -22,7 +22,7 @@ The implementation now enforces hard upload ceilings that were never specified; 
 
 ### 2.1 Current State
 
-[Plan 003 Task 1](../dev_docs/_plan_003_short_term.md) added `http.MaxBytesReader` and `io.LimitReader` guards across all modules, codifying three hardcoded constants in [`go_shared_libs/httplimits`](../../go_shared_libs/httplimits/httplimits.go):
+[Plan 003 Task 1](../dev_docs/old/_plan_003_short_term.md) added `http.MaxBytesReader` and `io.LimitReader` guards across all modules, codifying three hardcoded constants in [`go_shared_libs/httplimits`](../../go_shared_libs/httplimits/httplimits.go):
 
 - `DefaultMaxAPIRequestBodyBytes` = 10 MiB (JSON/API request bodies).
 - `DefaultMaxArtifactUploadBytes` = 100 MiB (artifact blob uploads).

@@ -15,9 +15,15 @@ func (m *Model) applyEnsureThreadResult(msg *ensureThreadResult) (tea.Model, tea
 	} else if msg.threadID != "" {
 		if m.Session != nil {
 			m.Session.SetCurrentThreadID(msg.threadID)
-			if msg.userID != "" && m.Session.Client != nil {
+			uid := msg.userID
+			if uid == "" {
+				// Async ensure-thread may have run GetMe before the gateway was ready; retry so
+				// last_threads.json is written for the next TUI launch (E2E resume UX).
+				uid = m.userIDForEnsureThread()
+			}
+			if uid != "" && m.Session.Client != nil {
 				if root, err := tuicache.Root(); err == nil {
-					_ = tuicache.WriteLastThread(root, m.Session.Client.BaseURL(), msg.userID, m.Session.ProjectID, msg.threadID)
+					_ = tuicache.WriteLastThread(root, m.Session.Client.BaseURL(), uid, m.Session.ProjectID, msg.threadID)
 				}
 			}
 		}
@@ -42,7 +48,8 @@ func (m *Model) maybeStartProactiveTokenRefresh() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleProactiveTokenRefresh() (tea.Model, tea.Cmd) {
-	if m.ShowLoginForm || m.Loading {
+	// Refresh runs as an async Cmd and must not be suppressed during Loading (long streams).
+	if m.ShowLoginForm {
 		return m, nil
 	}
 	cmd := m.tokenRefreshCmd()
@@ -82,6 +89,9 @@ func (m *Model) applyTokenRefreshResult(msg tokenRefreshResultMsg) (tea.Model, t
 	}
 	if m.Session != nil {
 		m.Session.SetToken(msg.resp.AccessToken)
+	}
+	if m.Session != nil && m.Session.Client != nil {
+		m.restartSessionNatsFromLogin(m.Session.Client, msg.resp)
 	}
 	return m, nil
 }

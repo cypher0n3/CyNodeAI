@@ -13,6 +13,9 @@ Targeted tags for subsets:
 - no_inference: test does not require a running LLM/Ollama; use for fast or CI runs
   without inference.
 - pma_inference: inference via PMA (gateway chat, worker PMA proxy with inference).
+- PMA warm pool (cynodeai-managed-pma-pool-*): orchestrator keeps spare slots (REQ-ORCHES-0192);
+  login assigns slots to sessions; pool shrinks on logout or admin revoke_sessions (e2e_0831,
+  e2e_0840). Class e2e_0831 uses no_inference only (no LLM required for container lifecycle).
 - sba_inference: SBA tasks that use inference.
 - auth, task, chat, worker: smaller subsets for focused runs.
 
@@ -22,6 +25,7 @@ Logical group tags (run related tests together):
 - control_plane: node register, capability, workflow API.
 - sba: all SBA (sandbox agent) tests.
 - gateway: user gateway health and streaming contract.
+- nats: JetStream session lifecycle / connectivity (gateway + control-plane NATS paths).
 - uds_routing: inference proxy UDS and run-args contract tests (worker_node).
 - worker_node: use suite_worker_node for all worker/node tests.
 """
@@ -55,6 +59,7 @@ TAG_STREAMING = "streaming"
 TAG_CONTROL_PLANE = "control_plane"
 TAG_SBA = "sba"
 TAG_GATEWAY = "gateway"
+TAG_NATS = "nats"
 TAG_UDS_ROUTING = "uds_routing"
 
 # Prereq names (whitelist). Tests declare prereqs = ["gateway", "config", ...];
@@ -64,6 +69,8 @@ PREREQ_CONFIG = "config"
 PREREQ_AUTH = "auth"
 PREREQ_TASK_ID = "task_id"
 PREREQ_OLLAMA = "ollama"
+# Gateway PMA chat path ready (after host Ollama smoke); only for tests tagged pma_inference.
+PREREQ_PMA_CHAT = "pma_chat"
 PREREQ_NODE_REGISTER = "node_register"
 
 PREREQ_WHITELIST = frozenset[str]({
@@ -72,6 +79,7 @@ PREREQ_WHITELIST = frozenset[str]({
     PREREQ_AUTH,
     PREREQ_TASK_ID,
     PREREQ_OLLAMA,
+    PREREQ_PMA_CHAT,
     PREREQ_NODE_REGISTER,
 })
 
@@ -83,6 +91,7 @@ PREREQ_ORDER = (
     PREREQ_NODE_REGISTER,
     PREREQ_TASK_ID,
     PREREQ_OLLAMA,
+    PREREQ_PMA_CHAT,
 )
 
 # Prereqs that must be re-run before every test that needs them (e.g. login token state).

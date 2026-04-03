@@ -17,10 +17,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/natsconfig"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/natsjwt"
 	"github.com/google/uuid"
 	"github.com/oklog/ulid/v2"
 )
@@ -46,11 +48,14 @@ type NodeHandler struct {
 	workerAPIBearerToken     string
 	workerAPITargetURL       string
 	workerInternalAgentToken string
+	natsIssuer               *natsjwt.Issuer
+	natsURL                  string
+	natsWS                   string
 	logger                   *slog.Logger
 }
 
 // NewNodeHandler creates a new node handler.
-func NewNodeHandler(db database.Store, jwt *auth.JWTManager, registrationPSK, orchestratorPublicURL, workerAPIBearerToken, workerAPITargetURL, workerInternalAgentToken string, logger *slog.Logger) *NodeHandler {
+func NewNodeHandler(db database.Store, jwt *auth.JWTManager, registrationPSK, orchestratorPublicURL, workerAPIBearerToken, workerAPITargetURL, workerInternalAgentToken string, natsIssuer *natsjwt.Issuer, natsURL, natsWebSocketURL string, logger *slog.Logger) *NodeHandler {
 	return &NodeHandler{
 		db:                       db,
 		jwt:                      jwt,
@@ -59,6 +64,9 @@ func NewNodeHandler(db database.Store, jwt *auth.JWTManager, registrationPSK, or
 		workerAPIBearerToken:     workerAPIBearerToken,
 		workerAPITargetURL:       workerAPITargetURL,
 		workerInternalAgentToken: workerInternalAgentToken,
+		natsIssuer:               natsIssuer,
+		natsURL:                  strings.TrimSpace(natsURL),
+		natsWS:                   strings.TrimSpace(natsWebSocketURL),
 		logger:                   logger,
 	}
 }
@@ -147,7 +155,7 @@ func (h *NodeHandler) handleExistingNodeRegistration(ctx context.Context, w http
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, h.buildBootstrapResponse(h.orchestratorPublicURL, nodeJWT, expiresAt))
+	WriteJSON(w, http.StatusOK, h.buildBootstrapResponse(h.orchestratorPublicURL, nodeJWT, expiresAt, node.ID))
 }
 
 func (h *NodeHandler) handleNewNodeRegistration(ctx context.Context, w http.ResponseWriter, req *nodepayloads.RegistrationRequest) {
@@ -168,7 +176,7 @@ func (h *NodeHandler) handleNewNodeRegistration(ctx context.Context, w http.Resp
 	}
 
 	h.logInfo("node registered", "node_id", newNode.ID, "node_slug", newNode.NodeSlug)
-	WriteJSON(w, http.StatusCreated, h.buildBootstrapResponse(h.orchestratorPublicURL, nodeJWT, expiresAt))
+	WriteJSON(w, http.StatusCreated, h.buildBootstrapResponse(h.orchestratorPublicURL, nodeJWT, expiresAt, newNode.ID))
 }
 
 func (h *NodeHandler) initializeNewNode(ctx context.Context, nodeID uuid.UUID, capability *nodepayloads.CapabilityReport) {
@@ -213,9 +221,9 @@ func (h *NodeHandler) applyWorkerAPIURLFromCapability(ctx context.Context, nodeI
 	}
 }
 
-func (h *NodeHandler) buildBootstrapResponse(baseURL, nodeJWT string, expiresAt time.Time) nodepayloads.BootstrapResponse {
+func (h *NodeHandler) buildBootstrapResponse(baseURL, nodeJWT string, expiresAt time.Time, nodeID uuid.UUID) nodepayloads.BootstrapResponse {
 	baseURL = strings.TrimSuffix(baseURL, "/")
-	return nodepayloads.BootstrapResponse{
+	out := nodepayloads.BootstrapResponse{
 		Version:  1,
 		IssuedAt: time.Now().UTC().Format(time.RFC3339),
 		Orchestrator: nodepayloads.BootstrapOrchestrator{
@@ -231,6 +239,20 @@ func (h *NodeHandler) buildBootstrapResponse(baseURL, nodeJWT string, expiresAt 
 			ExpiresAt: expiresAt.Format(time.RFC3339),
 		},
 	}
+	if h.natsIssuer != nil && nodeID != uuid.Nil {
+		tok, err := h.natsIssuer.NodeJWT(natsjwt.DefaultTenantID, nodeID, expiresAt)
+		if err != nil {
+			h.logWarn("nats node jwt", "error", err)
+		} else {
+			out.Nats = &natsconfig.ClientCredentials{
+				URL:          h.natsURL,
+				WebSocketURL: h.natsWS,
+				JWT:          tok,
+				JWTExpiresAt: expiresAt.UTC().Format(time.RFC3339),
+			}
+		}
+	}
+	return out
 }
 
 // resolveConfigVersion returns the node's config version or a new ULID, persisting when new.
@@ -383,28 +405,105 @@ func (h *NodeHandler) resolveWorkerInternalAgentTokenForPMA() string {
 	return tok
 }
 
-func (h *NodeHandler) buildPMAManagedServiceList(ctx context.Context, serviceID, image, inferenceBaseURL, defaultModel string, inferenceBackendEnv map[string]string, workerInternalAgentToken string) []nodepayloads.ConfigManagedService {
-	services := []nodepayloads.ConfigManagedService{
-		h.pmaManagedServiceSpec(serviceID, image, inferenceBaseURL, defaultModel, inferenceBackendEnv, workerInternalAgentToken),
-	}
-	extra, err := h.db.ListAllActiveSessionBindings(ctx)
+// buildPMAManagedServiceList returns desired PMA warm pool slots (REQ-ORCHES-0192): pma-pool-0..N-1.
+// Unassigned slots run idle (no session env); assigned slots carry the interactive session binding env.
+// PMA_SERVICE_ID remains a reserved id that MUST NOT equal a pool slot binding.
+func (h *NodeHandler) buildPMAManagedServiceList(ctx context.Context, reservedMainServiceID, image, inferenceBaseURL, defaultModel string, inferenceBackendEnv map[string]string, workerInternalAgentToken string) []nodepayloads.ConfigManagedService {
+	var out []nodepayloads.ConfigManagedService
+	all, err := h.db.ListAllActiveSessionBindings(ctx)
 	if err != nil {
 		if h.logger != nil {
 			h.logger.Warn("list session bindings for managed services", "error", err)
 		}
-		return services
+		return out
 	}
-	for _, b := range extra {
-		if b.ServiceID == "" || b.ServiceID == serviceID {
-			continue
+	valid := h.pmaBindingsWithUsableRefresh(ctx, all, reservedMainServiceID)
+	target := poolTargetSlotCount(len(valid))
+	if err := migrateLegacyPMAPoolServiceIDs(ctx, h.db, valid, target, h.logger); err != nil && h.logger != nil {
+		h.logger.Warn("pma warm pool migrate legacy service_id", "error", err)
+	}
+	valid, err = collectActiveBindingsWithValidRefresh(ctx, h.db)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Warn("pma warm pool reload bindings after migrate", "error", err)
 		}
-		services = append(services, h.pmaManagedServiceSpec(b.ServiceID, image, inferenceBaseURL, defaultModel, inferenceBackendEnv, workerInternalAgentToken))
+		return out
 	}
-	return services
+	target = poolTargetSlotCount(len(valid))
+	return h.pmaDesiredServicesForPoolSlots(valid, target, reservedMainServiceID, image, inferenceBaseURL, defaultModel, inferenceBackendEnv, workerInternalAgentToken)
 }
 
-func (h *NodeHandler) pmaManagedServiceSpec(serviceID, image, inferenceBaseURL, defaultModel string, inferenceBackendEnv map[string]string, workerInternalAgentToken string) nodepayloads.ConfigManagedService {
-	return nodepayloads.ConfigManagedService{
+func (h *NodeHandler) pmaBindingsWithUsableRefresh(ctx context.Context, all []*models.SessionBinding, reservedMainServiceID string) []*models.SessionBinding {
+	now := time.Now().UTC()
+	var valid []*models.SessionBinding
+	for _, b := range all {
+		if b == nil || b.ServiceID == reservedMainServiceID {
+			continue
+		}
+		rs, rsErr := h.db.GetRefreshSessionByID(ctx, b.SessionID)
+		if rsErr != nil {
+			h.pmaHandleRefreshLookupError(ctx, b, rsErr)
+			continue
+		}
+		if !rs.IsActive || rs.ExpiresAt.Before(now) {
+			h.pmaTeardownBindingForInactiveRefresh(ctx, b)
+			continue
+		}
+		valid = append(valid, b)
+	}
+	return valid
+}
+
+func (h *NodeHandler) pmaHandleRefreshLookupError(ctx context.Context, b *models.SessionBinding, rsErr error) {
+	if errors.Is(rsErr, database.ErrNotFound) {
+		if terr := TeardownPMAForInteractiveSession(ctx, h.db, b.UserID, b.SessionID, "managed_services_refresh_missing", h.logger); terr != nil && h.logger != nil {
+			h.logger.Warn("pma managed service stale binding teardown", "session_id", b.SessionID, "error", terr)
+		}
+		return
+	}
+	if h.logger != nil {
+		h.logger.Warn("pma managed service skip binding refresh lookup failed", "session_id", b.SessionID, "error", rsErr)
+	}
+}
+
+func (h *NodeHandler) pmaTeardownBindingForInactiveRefresh(ctx context.Context, b *models.SessionBinding) {
+	if terr := TeardownPMAForInteractiveSession(ctx, h.db, b.UserID, b.SessionID, "managed_services_refresh_inactive", h.logger); terr != nil && h.logger != nil {
+		h.logger.Warn("pma managed service stale binding teardown", "session_id", b.SessionID, "error", terr)
+	}
+}
+
+func (h *NodeHandler) pmaDesiredServicesForPoolSlots(valid []*models.SessionBinding, target int, reservedMainServiceID, image, inferenceBaseURL, defaultModel string, inferenceBackendEnv map[string]string, workerInternalAgentToken string) []nodepayloads.ConfigManagedService {
+	bySlot := make(map[int]*models.SessionBinding)
+	for _, b := range valid {
+		if b == nil || b.ServiceID == "" || b.ServiceID == reservedMainServiceID {
+			continue
+		}
+		slot, ok := parsePMAPoolSlot(b.ServiceID)
+		if !ok || slot >= target {
+			continue
+		}
+		bySlot[slot] = b
+	}
+	var out []nodepayloads.ConfigManagedService
+	for k := 0; k < target; k++ {
+		sid := poolServiceID(k)
+		if b := bySlot[k]; b != nil {
+			sessionEnv := map[string]string{
+				"CYNODE_SESSION_ID":  b.SessionID.String(),
+				"CYNODE_USER_ID":     b.UserID.String(),
+				"CYNODE_TENANT_ID":   natsjwt.DefaultTenantID,
+				"CYNODE_BINDING_KEY": b.BindingKey,
+			}
+			out = append(out, h.pmaManagedServiceSpec(sid, image, inferenceBaseURL, defaultModel, inferenceBackendEnv, workerInternalAgentToken, sessionEnv))
+			continue
+		}
+		out = append(out, h.pmaManagedServiceSpec(sid, image, inferenceBaseURL, defaultModel, inferenceBackendEnv, workerInternalAgentToken, nil))
+	}
+	return out
+}
+
+func (h *NodeHandler) pmaManagedServiceSpec(serviceID, image, inferenceBaseURL, defaultModel string, inferenceBackendEnv map[string]string, workerInternalAgentToken string, sessionEnv map[string]string) nodepayloads.ConfigManagedService {
+	svc := nodepayloads.ConfigManagedService{
 		ServiceID:   serviceID,
 		ServiceType: "pma",
 		Image:       image,
@@ -428,6 +527,10 @@ func (h *NodeHandler) pmaManagedServiceSpec(serviceID, image, inferenceBaseURL, 
 			AgentToken:            workerInternalAgentToken,
 		},
 	}
+	if len(sessionEnv) > 0 {
+		svc.Env = sessionEnv
+	}
+	return svc
 }
 
 func deriveNodeLocalInferenceBaseURL(workerAPITargetURL string) string {

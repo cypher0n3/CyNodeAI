@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
+	"github.com/cypher0n3/cynodeai/cynork/internal/sessionnats"
 	"github.com/cypher0n3/cynodeai/cynork/internal/tuicache"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 )
@@ -37,7 +38,7 @@ const chatThreadListLimit = 50
 const ctrlCExitThreshold = 2
 
 // proactiveTokenRefreshInterval is how often we try to refresh the access token while the TUI is active.
-const proactiveTokenRefreshInterval = 8 * time.Minute
+const proactiveTokenRefreshInterval = 5 * time.Minute
 
 // sendResult is the message returned when a SendMessage completes (non-streaming fallback).
 type sendResult struct {
@@ -128,6 +129,7 @@ type loginResultMsg struct {
 	GatewayURL   string
 	AccessToken  string
 	RefreshToken string
+	Login        *userapi.LoginResponse
 	Err          error
 }
 
@@ -179,6 +181,7 @@ type AuthProvider interface {
 type Model struct {
 	Session      *chat.Session
 	AuthProvider AuthProvider // optional; used by /auth logout, refresh
+	sessionNats  *sessionnats.Runtime
 	Scrollback   []string
 	Input        string
 	// inputCursor is the byte offset of the insertion caret in Input (UTF-8 boundary).
@@ -944,10 +947,10 @@ func (m *Model) userIDForEnsureThread() string {
 		return ""
 	}
 	u, err := m.Session.Client.GetMe(context.Background())
-	if err != nil {
-		return ""
+	if err == nil && u != nil && strings.TrimSpace(u.ID) != "" {
+		return strings.TrimSpace(u.ID)
 	}
-	return u.ID
+	return userIDFromAccessTokenUnverified(m.Session.Client.Token())
 }
 
 // persistLastThreadToCache writes CurrentThreadID under the XDG cache dir (keyed by gateway, user, project).
@@ -955,15 +958,15 @@ func (m *Model) persistLastThreadToCache() {
 	if m.Session == nil || m.Session.Client == nil || m.Session.Client.Token() == "" || m.Session.CurrentThreadID == "" {
 		return
 	}
-	u, err := m.Session.Client.GetMe(context.Background())
-	if err != nil {
+	uid := m.userIDForEnsureThread()
+	if uid == "" {
 		return
 	}
 	root, err := tuicache.Root()
 	if err != nil {
 		return
 	}
-	_ = tuicache.WriteLastThread(root, m.Session.Client.BaseURL(), u.ID, m.Session.ProjectID, m.Session.CurrentThreadID)
+	_ = tuicache.WriteLastThread(root, m.Session.Client.BaseURL(), uid, m.Session.ProjectID, m.Session.CurrentThreadID)
 }
 
 // ensureThreadScrollbackLine picks landmark + suffix for thread ensure scrollback (Bug 3).

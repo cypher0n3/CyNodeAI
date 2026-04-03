@@ -37,7 +37,7 @@ func TestNodeHandler_handleExistingNodeDBError(t *testing.T) {
 	mockDB.AddNode(node)
 	mockDB.ForceError = errors.New("db error on update")
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", nil, "", "", logger)
 
 	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",

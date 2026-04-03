@@ -321,6 +321,26 @@ func TestRun_WithTestDatabaseOpen(t *testing.T) {
 
 // TestRun_WithTestStore starts run() with testStore set and POSTs to the tool-call endpoint to cover the store path.
 func TestRun_WithTestStore(t *testing.T) {
+	// Clear agent bearer env so standalone gateway matches unit tests (no auth required). CI/dev shells often export these from .env.dev.
+	oldPM := os.Getenv("WORKER_INTERNAL_AGENT_TOKEN")
+	oldSand := os.Getenv("MCP_SANDBOX_AGENT_BEARER_TOKEN")
+	oldPA := os.Getenv("MCP_PA_AGENT_BEARER_TOKEN")
+	_ = os.Unsetenv("WORKER_INTERNAL_AGENT_TOKEN")
+	_ = os.Unsetenv("MCP_SANDBOX_AGENT_BEARER_TOKEN")
+	_ = os.Unsetenv("MCP_PA_AGENT_BEARER_TOKEN")
+	defer func() {
+		restore := func(k, v string) {
+			if v != "" {
+				_ = os.Setenv(k, v)
+			} else {
+				_ = os.Unsetenv(k)
+			}
+		}
+		restore("WORKER_INTERNAL_AGENT_TOKEN", oldPM)
+		restore("MCP_SANDBOX_AGENT_BEARER_TOKEN", oldSand)
+		restore("MCP_PA_AGENT_BEARER_TOKEN", oldPA)
+	}()
+
 	testStore = testutil.NewMockDB()
 	defer func() { testStore = nil }()
 

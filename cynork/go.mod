@@ -14,6 +14,8 @@ require (
 	github.com/cucumber/godog v0.15.1
 	github.com/cypher0n3/cynodeai/go_shared_libs v0.0.0
 	github.com/google/uuid v1.6.0
+	github.com/nats-io/nats-server/v2 v2.12.2
+	github.com/nats-io/nats.go v1.50.0
 	github.com/peterh/liner v1.2.2
 	github.com/spf13/cobra v1.10.2
 	github.com/zalando/go-keyring v0.2.6
@@ -24,6 +26,7 @@ require (
 require (
 	al.essio.dev/pkg/shellescape v1.5.1 // indirect
 	github.com/alecthomas/chroma/v2 v2.23.1 // indirect
+	github.com/antithesishq/antithesis-sdk-go v0.4.3-default-no-op // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
@@ -40,21 +43,27 @@ require (
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
+	github.com/google/go-tpm v0.9.6 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-memdb v1.3.5 // indirect
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.21 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
+	github.com/minio/highwayhash v1.0.4-0.20251030100505-070ab1a87a76 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
+	github.com/nats-io/jwt/v2 v2.8.0 // indirect
+	github.com/nats-io/nkeys v0.4.15 // indirect
+	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
@@ -63,10 +72,12 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.7.16 // indirect
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
+	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
 )
 
 replace github.com/cypher0n3/cynodeai/go_shared_libs => ../go_shared_libs

@@ -86,8 +86,12 @@ func runTUIWithSession(session *chat.Session, resumeThreadSelector string) error
 		m.OpenLoginFormOnInit = true
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
-	if _, err := tuiRunProgram(p); err != nil {
+	final, err := tuiRunProgram(p)
+	if err != nil {
 		return err
+	}
+	if mm, ok := final.(*tui.Model); ok {
+		mm.CleanupSessionNats()
 	}
 	return nil
 }

@@ -293,15 +293,33 @@ func registerOrchestratorTasksDispatchChat(sc *godog.ScenarioContext, state *tes
 		if err := st.db.UpdateNodeStatus(ctx, node.ID, "active"); err != nil {
 			return err
 		}
-		// REQ-ORCHES-0162 / REQ-ORCHES-0151: capability ServiceID must match the session binding for
-		// this login. Derive only from the current refresh session (not ListActiveBindingsForUser),
-		// because BDD shares one Postgres across scenarios and stale bindings would confuse routing.
-		svcID := "pma-bdd"
+		// Chat PMA routing collects candidates from dispatchable nodes only (same as /readyz).
+		if st.workerServer == nil {
+			st.workerServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+		}
+		if strings.TrimSpace(st.workerToken) == "" {
+			st.workerToken = "bdd-pma-dispatch-token"
+		}
+		if err := st.db.UpdateNodeWorkerAPIConfig(ctx, node.ID, st.workerServer.URL, st.workerToken); err != nil {
+			return err
+		}
+		ackAt := time.Now().UTC()
+		if err := st.db.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil); err != nil {
+			return err
+		}
+		// REQ-ORCHES-0162 / REQ-ORCHES-0192: snapshot ServiceID must match the persisted session binding
+		// (warm pool pma-pool-* after greedy login), not legacy PMAServiceIDForBindingKey.
+		svcID := "pma-pool-0"
 		if st.refreshToken != "" {
 			if rs, err := st.db.GetActiveRefreshSession(ctx, auth.HashToken(st.refreshToken)); err == nil && rs != nil {
 				if u, uerr := st.db.GetUserByID(ctx, rs.UserID); uerr == nil && u != nil {
 					lineage := models.SessionBindingLineage{UserID: u.ID, SessionID: rs.ID, ThreadID: nil}
-					svcID = models.PMAServiceIDForBindingKey(models.DeriveSessionBindingKey(lineage))
+					key := models.DeriveSessionBindingKey(lineage)
+					if b, berr := st.db.GetSessionBindingByKey(ctx, key); berr == nil && b != nil && strings.TrimSpace(b.ServiceID) != "" {
+						svcID = b.ServiceID
+					}
 				}
 			}
 		}

@@ -31,6 +31,7 @@ Scenario: Responses request returns 200 or acceptable error status
 @req_orches_0188
 @req_orches_0190
 @req_orches_0191
+@req_orches_0192
 @req_worker_0176
 @spec_cynai_usrgwy_openaichatapi
 Scenario: Chat with model cynodeai.pm uses worker-reported PMA endpoint only

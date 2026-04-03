@@ -238,7 +238,7 @@ func registerOrchestratorBootstrapTasks(sc *godog.ScenarioContext, state *testSt
 		st := getState(ctx)
 		if st != nil {
 			st.nodeSlug = slug
-			st.advertisedWorkerAPIURL = workerAPIURL
+			st.advertisedWorkerAPIURL = normalizeWorkerAPIBaseURL(workerAPIURL)
 		}
 		return nil
 	})
@@ -314,8 +314,12 @@ func registerOrchestratorBootstrapTasks(sc *godog.ScenarioContext, state *testSt
 		if err != nil {
 			return err
 		}
-		if node.WorkerAPITargetURL == nil || *node.WorkerAPITargetURL != st.advertisedWorkerAPIURL {
-			return fmt.Errorf("node %q worker_api_target_url %v, want %q", slug, node.WorkerAPITargetURL, st.advertisedWorkerAPIURL)
+		got := ""
+		if node.WorkerAPITargetURL != nil {
+			got = *node.WorkerAPITargetURL
+		}
+		if got != st.advertisedWorkerAPIURL {
+			return fmt.Errorf("node %q worker_api_target_url %q, want %q", slug, got, st.advertisedWorkerAPIURL)
 		}
 		return nil
 	})

@@ -358,7 +358,7 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
 - `managed_services` (object, optional)
   - Desired state for orchestrator-directed managed services that this node MUST run and supervise.
   - Managed services are long-lived service containers (distinct from per-job sandbox containers).
-  - The orchestrator MAY include **multiple** entries with `service_type=pma` and **distinct** `service_id` values (one Project Manager PMA instance per session binding per [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)).
+  - The orchestrator MAY include **multiple** entries with `service_type=pma` and **distinct** `service_id` values (`pma-pool-*` warm pool per [CYNAI.ORCHES.PmaWarmPool](orchestrator_bootstrap.md#spec-cynai-orches-pmawarmpool), assigned per session binding per [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)).
   - `services` (array of objects, optional)
     - Each element declares a desired managed service instance on this node.
     - Required fields (minimum):

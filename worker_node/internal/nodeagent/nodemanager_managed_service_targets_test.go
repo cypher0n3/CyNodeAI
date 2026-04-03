@@ -432,12 +432,7 @@ func TestSendConfigAck_NilConfig(t *testing.T) {
 }
 
 func TestFetchConfig_BadJSON(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("not json"))
-	}))
-	defer srv.Close()
+	srv := newTestServerJSONFixedBody(t, "not json")
 	bootstrap := &BootstrapData{NodeJWT: "jwt", NodeConfigURL: srv.URL}
 	cfg := &Config{HTTPTimeout: 5 * time.Second}
 	ctx := context.Background()

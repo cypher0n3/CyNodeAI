@@ -68,6 +68,9 @@ func runMain(ctx context.Context) int {
 // run sets up and runs the server until ctx is canceled. Used by main and tests.
 func run(ctx context.Context, logger *slog.Logger) error {
 	cfg := config.LoadOrchestratorConfig()
+	if err := config.ResolveNATSSeeds(cfg); err != nil {
+		return err
+	}
 	if err := config.ValidateSecrets(cfg); err != nil {
 		return err
 	}

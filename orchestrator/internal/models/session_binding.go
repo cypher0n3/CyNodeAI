@@ -46,7 +46,9 @@ type SessionBinding struct {
 
 // DeriveSessionBindingKey returns a stable opaque key from user ID and session/thread lineage.
 // The same lineage always yields the same key; different users, sessions, or threads yield different keys.
-// PMAServiceIDForBindingKey returns a distinct managed-service service_id for a session binding key.
+//
+// PMAServiceIDForBindingKey is legacy: production assigns pma-pool-* slots (REQ-ORCHES-0192), not
+// per-binding pma-sb-* ids. Retained for tests and migration helpers.
 func PMAServiceIDForBindingKey(bindingKey string) string {
 	if len(bindingKey) >= 12 {
 		return "pma-sb-" + bindingKey[:12]

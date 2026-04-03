@@ -17,7 +17,7 @@ class TestPmaChatContext(unittest.TestCase):
         "suite_e2e", "suite_orchestrator", "full_demo", "inference",
         "pma_inference", "chat", "pma",
     ]
-    prereqs = ["gateway", "config", "auth", "task_id", "ollama"]
+    prereqs = ["gateway", "config", "auth", "task_id", "ollama", "pma_chat"]
 
     def setUp(self):
         ok, detail = helpers.prepare_e2e_cynork_auth()

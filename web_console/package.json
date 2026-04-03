@@ -1,0 +1,16 @@
+{
+  "name": "cynodeai-web-console",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Web Console (Nuxt) — NATS WebSocket dependency for session lifecycle (Phase 1).",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "nats.ws": "^1.29.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.0"
+  }
+}

@@ -74,6 +74,21 @@ func TestIntegration_CreateRefreshSession_ReturnsSession(t *testing.T) {
 	}
 }
 
+func TestIntegration_InvalidateAllRefreshSessions(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "invalidate-all-rs-"+uuid.New().String(), nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	expires := time.Now().UTC().Add(time.Hour)
+	if _, err := db.CreateRefreshSession(ctx, user.ID, []byte("h1"), expires); err != nil {
+		t.Fatalf("CreateRefreshSession: %v", err)
+	}
+	if err := db.InvalidateAllRefreshSessions(ctx); err != nil {
+		t.Fatalf("InvalidateAllRefreshSessions: %v", err)
+	}
+}
+
 func TestIntegration_GetRefreshSessionByID(t *testing.T) {
 	db, ctx := integrationDB(t)
 	user, err := db.CreateUser(ctx, "getrs-"+uuid.New().String(), nil)

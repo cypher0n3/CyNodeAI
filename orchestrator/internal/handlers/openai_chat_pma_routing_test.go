@@ -20,7 +20,7 @@ func TestPmaRouting_BySessionBindingServiceID(t *testing.T) {
 	rsID := uuid.New()
 	lineage := models.SessionBindingLineage{UserID: uid, SessionID: rsID, ThreadID: nil}
 	key := models.DeriveSessionBindingKey(lineage)
-	svcID := models.PMAServiceIDForBindingKey(key)
+	svcID := poolServiceID(0)
 	now := time.Now().UTC()
 	db.SessionBindingsByKey[key] = &models.SessionBinding{
 		SessionBindingBase: models.SessionBindingBase{
@@ -35,12 +35,14 @@ func TestPmaRouting_BySessionBindingServiceID(t *testing.T) {
 		UpdatedAt: now,
 	}
 	nodeID := uuid.New()
-	db.AddNode(&models.Node{
-		NodeBase:  models.NodeBase{NodeSlug: "n1", Status: models.NodeStatusActive},
+	n1 := &models.Node{
+		NodeBase:  models.NodeBase{NodeSlug: "n1"},
 		ID:        nodeID,
 		CreatedAt: now,
 		UpdatedAt: now,
-	})
+	}
+	testutil.ApplyDispatchableWorkerFields(&n1.NodeBase, "", "")
+	db.AddNode(n1)
 	report := nodepayloads.CapabilityReport{
 		Version:    1,
 		ReportedAt: now.Format(time.RFC3339),
@@ -55,7 +57,7 @@ func TestPmaRouting_BySessionBindingServiceID(t *testing.T) {
 					ReadyAt:     now.Format(time.RFC3339),
 				},
 				{
-					ServiceID:   "pma-main",
+					ServiceID:   poolServiceID(1),
 					ServiceType: "pma",
 					State:       "ready",
 					Endpoints:   []string{"http://wrong-pma/proxy"},
@@ -76,14 +78,14 @@ func TestPmaRouting_BySessionBindingServiceID(t *testing.T) {
 	}
 }
 
-func TestPmaRouting_StaleBindingFallsBackToLatestReadyPMA(t *testing.T) {
+func TestPmaRouting_StaleBindingDoesNotFallBackToOtherPMA(t *testing.T) {
 	ctx := context.Background()
 	db := testutil.NewMockDB()
 	uid := uuid.New()
 	rsID := uuid.New()
 	lineage := models.SessionBindingLineage{UserID: uid, SessionID: rsID, ThreadID: nil}
 	key := models.DeriveSessionBindingKey(lineage)
-	svcID := models.PMAServiceIDForBindingKey(key)
+	svcID := poolServiceID(0)
 	now := time.Now().UTC()
 	db.SessionBindingsByKey[key] = &models.SessionBinding{
 		SessionBindingBase: models.SessionBindingBase{
@@ -98,12 +100,14 @@ func TestPmaRouting_StaleBindingFallsBackToLatestReadyPMA(t *testing.T) {
 		UpdatedAt: now,
 	}
 	nodeID := uuid.New()
-	db.AddNode(&models.Node{
-		NodeBase:  models.NodeBase{NodeSlug: "n1", Status: models.NodeStatusActive},
+	n1b := &models.Node{
+		NodeBase:  models.NodeBase{NodeSlug: "n1"},
 		ID:        nodeID,
 		CreatedAt: now,
 		UpdatedAt: now,
-	})
+	}
+	testutil.ApplyDispatchableWorkerFields(&n1b.NodeBase, "", "")
+	db.AddNode(n1b)
 	report := nodepayloads.CapabilityReport{
 		Version: 1,
 		Node:    nodepayloads.CapabilityNode{NodeSlug: "n1"},
@@ -117,10 +121,10 @@ func TestPmaRouting_StaleBindingFallsBackToLatestReadyPMA(t *testing.T) {
 	_ = db.SaveNodeCapabilitySnapshot(ctx, nodeID, string(raw))
 	h := NewOpenAIChatHandler(db, newTestLogger(), "", "", "")
 	c := h.resolvePMAEndpointCandidate(ctx, uid)
-	if c.endpoint != "http://x" {
-		t.Fatalf("expected fallback to latest ready PMA when binding service_id missing from snapshot, got %q", c.endpoint)
+	if c.endpoint != "" {
+		t.Fatalf("expected empty endpoint when binding service_id missing from snapshot, got %q", c.endpoint)
 	}
-	if c.serviceID != "other" {
-		t.Fatalf("service_id %q want other", c.serviceID)
+	if c.serviceID != "" {
+		t.Fatalf("expected empty service_id, got %q", c.serviceID)
 	}
 }

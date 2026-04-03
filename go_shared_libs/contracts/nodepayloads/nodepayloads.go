@@ -4,6 +4,8 @@ package nodepayloads
 import (
 	"errors"
 	"strings"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/natsconfig"
 )
 
 // CapabilityReport represents the capability report from a node.
@@ -158,10 +160,11 @@ func (r *RegistrationRequest) Validate() error {
 // BootstrapResponse represents the bootstrap payload returned on registration.
 // Spec CYNAI.WORKER.Payload.BootstrapV1; see docs/tech_specs/worker_node_payloads.md node_bootstrap_payload_v1.
 type BootstrapResponse struct {
-	Version      int                   `json:"version"`
-	IssuedAt     string                `json:"issued_at"`
-	Orchestrator BootstrapOrchestrator `json:"orchestrator"`
-	Auth         BootstrapAuth         `json:"auth"`
+	Version      int                           `json:"version"`
+	IssuedAt     string                        `json:"issued_at"`
+	Orchestrator BootstrapOrchestrator         `json:"orchestrator"`
+	Auth         BootstrapAuth                 `json:"auth"`
+	Nats         *natsconfig.ClientCredentials `json:"nats,omitempty"`
 }
 
 // BootstrapOrchestrator contains orchestrator base URL and endpoint URLs.

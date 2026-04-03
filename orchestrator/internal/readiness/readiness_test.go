@@ -232,6 +232,139 @@ func TestHasWorkerReportedPMAReady_InvalidSnapshotJSON(t *testing.T) {
 	}
 }
 
+func TestReadyManagedPMAServiceIDs_DispatchableWithServiceID(t *testing.T) {
+	mock := testutil.NewMockDB()
+	nodeID := uuid.New()
+	mock.Nodes[nodeID] = &models.Node{
+		NodeBase: models.NodeBase{
+			NodeSlug:             "n1",
+			Status:               models.NodeStatusActive,
+			ConfigAckStatus:      &testConfigAckApplied,
+			WorkerAPITargetURL:   &testWorkerURL,
+			WorkerAPIBearerToken: &testBearerToken,
+		},
+		ID: nodeID,
+	}
+	report := nodepayloads.CapabilityReport{
+		ManagedServicesStatus: &nodepayloads.ManagedServicesStatus{
+			Services: []nodepayloads.ManagedServiceStatus{
+				{
+					ServiceID:   "pma-pool-0",
+					ServiceType: "pma",
+					State:       "ready",
+					Endpoints:   []string{"http://pma:1"},
+				},
+				{
+					ServiceID:   "pma-pool-0",
+					ServiceType: "pma",
+					State:       "ready",
+					Endpoints:   []string{"http://dup"},
+				},
+			},
+		},
+	}
+	capJSON, _ := json.Marshal(report)
+	_ = mock.SaveNodeCapabilitySnapshot(context.Background(), nodeID, string(capJSON))
+	ctx := context.Background()
+	ids, err := ReadyManagedPMAServiceIDs(ctx, mock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 1 || ids[0] != "pma-pool-0" {
+		t.Fatalf("ids=%v want one pma-pool-0", ids)
+	}
+}
+
+func TestReadyManagedPMAServiceIDs_ListNodesError(t *testing.T) {
+	store := &erroringStore{MockDB: testutil.NewMockDB(), listErr: errors.New("list err")}
+	_, err := ReadyManagedPMAServiceIDs(context.Background(), store)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestReadyManagedPMAServiceIDs_SkipsNodeWithoutSnapshot(t *testing.T) {
+	mock := testutil.NewMockDB()
+	nodeID := uuid.New()
+	mock.Nodes[nodeID] = &models.Node{
+		NodeBase: models.NodeBase{
+			NodeSlug:             "n1",
+			Status:               models.NodeStatusActive,
+			ConfigAckStatus:      &testConfigAckApplied,
+			WorkerAPITargetURL:   &testWorkerURL,
+			WorkerAPIBearerToken: &testBearerToken,
+		},
+		ID: nodeID,
+	}
+	ids, err := ReadyManagedPMAServiceIDs(context.Background(), mock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("want empty, got %v", ids)
+	}
+}
+
+func TestAppendReadyPMAServiceID_Branches(t *testing.T) {
+	seen := map[string]struct{}{}
+	var ids []string
+	appendReadyPMAServiceID(nil, seen, &ids)
+	if len(ids) != 0 {
+		t.Fatal("nil svc")
+	}
+	appendReadyPMAServiceID(&nodepayloads.ManagedServiceStatus{
+		ServiceType: "other", State: "ready", Endpoints: []string{"x"}, ServiceID: "a",
+	}, seen, &ids)
+	appendReadyPMAServiceID(&nodepayloads.ManagedServiceStatus{
+		ServiceType: "pma", State: "starting", Endpoints: []string{"x"}, ServiceID: "b",
+	}, seen, &ids)
+	appendReadyPMAServiceID(&nodepayloads.ManagedServiceStatus{
+		ServiceType: "pma", State: "ready", Endpoints: nil, ServiceID: "c",
+	}, seen, &ids)
+	appendReadyPMAServiceID(&nodepayloads.ManagedServiceStatus{
+		ServiceType: "pma", State: "ready", Endpoints: []string{"x"}, ServiceID: "  ",
+	}, seen, &ids)
+	ok := &nodepayloads.ManagedServiceStatus{
+		ServiceType: "PMA", State: "ready", Endpoints: []string{"http://1"}, ServiceID: "pool-1",
+	}
+	appendReadyPMAServiceID(ok, seen, &ids)
+	appendReadyPMAServiceID(ok, seen, &ids)
+	if len(ids) != 1 || ids[0] != "pool-1" {
+		t.Fatalf("ids=%v", ids)
+	}
+}
+
+func TestAppendReadyPMAIDsFromSnapshotJSON_Branches(t *testing.T) {
+	seen := map[string]struct{}{}
+	var ids []string
+	appendReadyPMAIDsFromSnapshotJSON("   ", seen, &ids)
+	appendReadyPMAIDsFromSnapshotJSON(`{`, seen, &ids)
+	report := nodepayloads.CapabilityReport{ManagedServicesStatus: nil}
+	j, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	appendReadyPMAIDsFromSnapshotJSON(string(j), seen, &ids)
+	if len(ids) != 0 {
+		t.Fatalf("expected no ids, got %v", ids)
+	}
+	report2 := nodepayloads.CapabilityReport{
+		ManagedServicesStatus: &nodepayloads.ManagedServicesStatus{
+			Services: []nodepayloads.ManagedServiceStatus{
+				{ServiceID: "x", ServiceType: "pma", State: "ready", Endpoints: []string{"/"}},
+			},
+		},
+	}
+	j2, err := json.Marshal(report2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	appendReadyPMAIDsFromSnapshotJSON(string(j2), seen, &ids)
+	if len(ids) != 1 || ids[0] != "x" {
+		t.Fatalf("ids=%v", ids)
+	}
+}
+
 func TestHasWorkerReportedPMAReady_NilManagedServicesStatus(t *testing.T) {
 	mock := testutil.NewMockDB()
 	nodeID := uuid.New()

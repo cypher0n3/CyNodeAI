@@ -35,7 +35,8 @@ def parse_args():
         epilog=(
             "Use --single TEST_ID to run one test or module only; stack must be up. "
             "Tags: suite_* (suite_orchestrator, suite_worker_node, ...), full_demo, "
-            "inference, pma_inference, sba_inference, auth, task, chat, worker, pma."
+            "inference, pma_inference, sba_inference, auth, task, chat, worker, pma. "
+            "Prereq pma_chat (after ollama) gates gateway PMA readiness for pma_inference tests."
         ),
     )
     p.add_argument(
@@ -174,68 +175,87 @@ def _collect_suite_prereqs(suite):
     return required
 
 
-def _suite_has_any_tag(suite, tag: str) -> bool:
-    """True if any test case in suite declares ``tag`` in class.tags."""
-    for test in _iter_tests(suite):
-        if isinstance(test, unittest.TestCase) and tag in e2e_tags.get_tags_for_test(test):
-            return True
-    return False
+def _prereq_gateway():
+    if not helpers.wait_for_gateway():
+        print("Error: user-gateway not ready (healthz) after 30s", file=sys.stderr)
+        return False
+    if not helpers.wait_for_gateway_readyz(timeout_sec=30):
+        print("Error: user-gateway readyz not 200 after 30s", file=sys.stderr)
+        return False
+    return True
+
+
+def _prereq_config():
+    state.init_config()
+    return True
+
+
+def _prereq_node_register():
+    if not helpers.ensure_node_registered():
+        print(
+            "Error: node register prereq failed (control-plane /v1/nodes/register)",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def _prereq_task_id():
+    if not helpers.ensure_e2e_task(state.CONFIG_PATH):
+        print(
+            "Warning: ensure_e2e_task failed; tests requiring state.TASK_ID "
+            "may skip or fail.",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def _prereq_ollama(opts):
+    """Host Ollama smoke only. Gateway PMA readiness is ``pma_chat`` (pma_inference tests)."""
+    if opts.skip_ollama:
+        os.environ["E2E_SKIP_INFERENCE_SMOKE"] = "1"
+        return True
+    if not ollama_e2e_helpers.run_ollama_inference_smoke():
+        print("Error: Ollama inference smoke failed", file=sys.stderr)
+        return False
+    return True
+
+
+def _prereq_pma_chat(opts):
+    """Wait until gateway PMA chat returns 2xx (declared only by pma_inference tests)."""
+    if opts.skip_ollama:
+        return True
+    if not ollama_e2e_helpers.ollama_container_running():
+        print(
+            "Error: pma_chat needs stack started with Ollama.",
+            file=sys.stderr,
+        )
+        return False
+    # After a fresh stack restart, Ollama may load a multi-GB model into GPU/ROCm
+    # for 5–10+ minutes before the first chat returns 2xx; 180s is too tight.
+    if not helpers.wait_for_pma_chat_ready(timeout_sec=900, poll_interval=5):
+        print("Error: PMA chat not ready within 900s", file=sys.stderr)
+        return False
+    return True
 
 
 def _run_single_prereq(name, opts):
     """Run one prereq step. Return True on success, False on failure."""
     if name == e2e_tags.PREREQ_GATEWAY:
-        if not helpers.wait_for_gateway():
-            print("Error: user-gateway not ready (healthz) after 30s", file=sys.stderr)
-            return False
-        if not helpers.wait_for_gateway_readyz(timeout_sec=30):
-            print("Error: user-gateway readyz not 200 after 30s", file=sys.stderr)
-            return False
-    elif name == e2e_tags.PREREQ_CONFIG:
-        state.init_config()
-    elif name == e2e_tags.PREREQ_AUTH:
-        if not _ensure_shared_auth_config():
-            return False
-    elif name == e2e_tags.PREREQ_NODE_REGISTER:
-        if not helpers.ensure_node_registered():
-            print(
-                "Error: node register prereq failed (control-plane /v1/nodes/register)",
-                file=sys.stderr,
-            )
-            return False
-    elif name == e2e_tags.PREREQ_TASK_ID:
-        if not helpers.ensure_e2e_task(state.CONFIG_PATH):
-            print(
-                "Warning: ensure_e2e_task failed; tests requiring state.TASK_ID "
-                "may skip or fail.",
-                file=sys.stderr,
-            )
-            return False
-    elif name == e2e_tags.PREREQ_OLLAMA:
-        if opts.skip_ollama:
-            os.environ["E2E_SKIP_INFERENCE_SMOKE"] = "1"
-        else:
-            if not ollama_e2e_helpers.run_ollama_inference_smoke():
-                print("Error: Ollama inference smoke failed", file=sys.stderr)
-                return False
-            include_tags = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
-            want_pma_chat_wait = "pma_inference" in include_tags or getattr(
-                opts, "suite_has_pma_inference", False
-            )
-            if want_pma_chat_wait:
-                if not ollama_e2e_helpers.ollama_container_running():
-                    print(
-                        "Error: pma_inference needs stack started with Ollama.",
-                        file=sys.stderr,
-                    )
-                    return False
-                # After a fresh stack restart, Ollama may load a multi-GB model into GPU/ROCm
-                # for 5–10+ minutes before the first chat returns 2xx; 180s is too tight.
-                if not helpers.wait_for_pma_chat_ready(
-                    timeout_sec=600, poll_interval=5
-                ):
-                    print("Error: PMA chat not ready within 600s", file=sys.stderr)
-                    return False
+        return _prereq_gateway()
+    if name == e2e_tags.PREREQ_CONFIG:
+        return _prereq_config()
+    if name == e2e_tags.PREREQ_AUTH:
+        return _ensure_shared_auth_config()
+    if name == e2e_tags.PREREQ_NODE_REGISTER:
+        return _prereq_node_register()
+    if name == e2e_tags.PREREQ_TASK_ID:
+        return _prereq_task_id()
+    if name == e2e_tags.PREREQ_OLLAMA:
+        return _prereq_ollama(opts)
+    if name == e2e_tags.PREREQ_PMA_CHAT:
+        return _prereq_pma_chat(opts)
     return True
 
 
@@ -380,14 +400,6 @@ def main():
         for t in _iter_tests(suite):
             print(t.id())
         sys.exit(0)
-
-    # Full-suite runs (no --tags) still include pma_inference-tagged tests; wait for PMA
-    # after Ollama smoke so greedy provisioning + worker reconcile can finish (see e2e_0610).
-    setattr(
-        opts,
-        "suite_has_pma_inference",
-        _suite_has_any_tag(suite, e2e_tags.TAG_PMA_INFERENCE),
-    )
 
     failed_prereqs = set()
     succeeded_prereqs = set()

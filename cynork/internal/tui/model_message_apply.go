@@ -85,6 +85,7 @@ func (m *Model) applyLoginResult(msg loginResultMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
+	m.restartSessionNatsFromLogin(client, msg.Login)
 	m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Logged in.")
 	// Ensure thread after login: new (default) or resolve --resume-thread (cynork_tui.md).
 	return m, combineTeaCmds(m.ensureThreadCmd(), m.maybeStartGatewayHealthPollOnce())
@@ -219,6 +220,7 @@ func runLoginCmd(gatewayURL, username, password string) tea.Cmd {
 			GatewayURL:   gatewayURL,
 			AccessToken:  resp.AccessToken,
 			RefreshToken: resp.RefreshToken,
+			Login:        resp,
 		}
 	}
 }

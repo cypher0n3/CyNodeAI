@@ -36,22 +36,26 @@ func TestMultiPMA_StartManagedServices_DistinctContainersPerServiceID(t *testing
 	}
 }
 
+func fakeRunnerPSAndStopLastArg(stopped *[]string, psOut string) fakeRunnerFunc {
+	return fakeRunnerFunc(func(name string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "ps" {
+			return []byte(psOut), nil
+		}
+		if len(args) > 0 && args[0] == cmdStop {
+			*stopped = append(*stopped, args[len(args)-1])
+		}
+		return []byte(""), nil
+	})
+}
+
 // TestStartManagedServices_StopsUndesiredContainers asserts containers matching cynodeai-managed-*
 // but absent from desired config get stop/rm before desired services are reconciled.
 func TestStartManagedServices_StopsUndesiredContainers(t *testing.T) {
 	var stopped []string
-	fr := fakeRunnerFunc(func(name string, args ...string) ([]byte, error) {
-		if len(args) > 0 && args[0] == "ps" {
-			return []byte("cynodeai-managed-pma-main\ncynodeai-managed-pma-sb-orphan\n"), nil
-		}
-		if len(args) > 0 && args[0] == "stop" {
-			stopped = append(stopped, args[len(args)-1])
-		}
-		return []byte(""), nil
-	})
+	fr := fakeRunnerPSAndStopLastArg(&stopped, "cynodeai-managed-pma-sb-keep\ncynodeai-managed-pma-sb-orphan\n")
 	withRunner(t, fr)
 	services := []nodepayloads.ConfigManagedService{
-		{ServiceID: "pma-main", ServiceType: "worker", Image: "img:latest"},
+		{ServiceID: "pma-sb-keep", ServiceType: "worker", Image: "img:latest"},
 	}
 	if err := startManagedServices(context.Background(), services); err != nil {
 		t.Fatalf("startManagedServices: %v", err)
@@ -59,8 +63,8 @@ func TestStartManagedServices_StopsUndesiredContainers(t *testing.T) {
 	if !slices.Contains(stopped, "cynodeai-managed-pma-sb-orphan") {
 		t.Fatalf("expected stop of undesired pma-sb container, stopped=%v", stopped)
 	}
-	if slices.Contains(stopped, "cynodeai-managed-pma-main") {
-		t.Fatalf("must not stop desired pma-main, stopped=%v", stopped)
+	if slices.Contains(stopped, "cynodeai-managed-pma-sb-keep") {
+		t.Fatalf("must not stop desired pma-sb-keep, stopped=%v", stopped)
 	}
 }
 
@@ -93,15 +97,7 @@ func TestStartManagedServices_SkipOnlyRowsDoesNotStopManagedContainers(t *testin
 // cynodeai-managed-* container (admin revoke / orchestrator cleared desired list).
 func TestStartManagedServices_EmptySliceStopsAllManaged(t *testing.T) {
 	var stopped []string
-	fr := fakeRunnerFunc(func(name string, args ...string) ([]byte, error) {
-		if len(args) > 0 && args[0] == "ps" {
-			return []byte("cynodeai-managed-pma-main\ncynodeai-managed-pma-sb-orphan\n"), nil
-		}
-		if len(args) > 0 && args[0] == "stop" {
-			stopped = append(stopped, args[len(args)-1])
-		}
-		return []byte(""), nil
-	})
+	fr := fakeRunnerPSAndStopLastArg(&stopped, "cynodeai-managed-pma-sb-keep\ncynodeai-managed-pma-sb-orphan\n")
 	withRunner(t, fr)
 	if err := startManagedServices(context.Background(), nil); err != nil {
 		t.Fatalf("startManagedServices: %v", err)

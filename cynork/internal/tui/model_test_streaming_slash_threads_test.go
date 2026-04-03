@@ -180,8 +180,8 @@ func TestModel_Update_ExpectNilCmd_Variants(t *testing.T) {
 		msg  tea.Msg
 	}{
 		{
-			name: "proactiveTokenRefreshWhenLoading",
-			prep: func(m *Model) { m.Loading = true },
+			name: "proactiveTokenRefreshWhenLoginForm",
+			prep: func(m *Model) { m.ShowLoginForm = true },
 			msg:  proactiveTokenRefreshMsg{},
 		},
 		{
@@ -773,7 +773,7 @@ func TestModel_SlashAuth_Logout_Success(t *testing.T) {
 //nolint:dupl // server handler pattern similar to TestModel_SlashAuth_Whoami_Success
 func TestModel_SlashAuth_Refresh_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/auth/refresh" || r.Method != http.MethodPost {
+		if r.URL.Path != testGatewayAuthRefreshPath || r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}

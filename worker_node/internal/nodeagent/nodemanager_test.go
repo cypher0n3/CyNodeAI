@@ -262,6 +262,14 @@ func TestBuildCapability_ManagedServicesStatus_HttpUnixURLsWhenAuto(t *testing.T
 	if !strings.Contains(proxy.ReadyCallbackProxyURL, "/v1/worker/internal/orchestrator/agent:ready") {
 		t.Errorf("expected ready URL to contain agent:ready path, got %q", proxy.ReadyCallbackProxyURL)
 	}
+	svc := report.ManagedServicesStatus.Services[0]
+	if svc.State != stateReady {
+		t.Errorf("expected PMA state %s, got %q", stateReady, svc.State)
+	}
+	wantEP := "http://worker:12090/v1/worker/managed-services/pma-main/proxy:http"
+	if len(svc.Endpoints) != 1 || svc.Endpoints[0] != wantEP {
+		t.Errorf("expected endpoint %q, got %v", wantEP, svc.Endpoints)
+	}
 }
 
 // TestBuildManagedServicesStatus_PMAAdvertisedURLFallback asserts that when NODE_ADVERTISED_WORKER_API_URL
@@ -282,7 +290,7 @@ func TestBuildManagedServicesStatus_PMAAdvertisedURLFallback(t *testing.T) {
 			},
 		},
 	}
-	out := buildManagedServicesStatus(nodeConfig)
+	out := buildManagedServicesStatus(nodeConfig, "")
 	if out == nil || len(out.Services) != 1 {
 		t.Fatalf("expected one service, got %+v", out)
 	}
@@ -295,10 +303,11 @@ func TestBuildManagedServicesStatus_PMAAdvertisedURLFallback(t *testing.T) {
 	}
 }
 
-// TestBuildManagedServicesStatus_WorkerProxyURL asserts PMA gets "ready" with worker proxy URL when NODE_ADVERTISED_WORKER_API_URL is set.
+// TestBuildManagedServicesStatus_WorkerProxyURL asserts PMA gets "ready" with worker proxy URL from
+// the advertised base argument (no env required; matches Config.AdvertisedWorkerAPIURL).
 func TestBuildManagedServicesStatus_WorkerProxyURL(t *testing.T) {
 	t.Setenv("WORKER_API_STATE_DIR", t.TempDir())
-	t.Setenv("NODE_ADVERTISED_WORKER_API_URL", "http://worker:12090")
+	t.Setenv("NODE_ADVERTISED_WORKER_API_URL", "")
 	defer func() {
 		_ = os.Unsetenv("WORKER_API_STATE_DIR")
 		_ = os.Unsetenv("NODE_ADVERTISED_WORKER_API_URL")
@@ -310,7 +319,7 @@ func TestBuildManagedServicesStatus_WorkerProxyURL(t *testing.T) {
 			},
 		},
 	}
-	out := buildManagedServicesStatus(nodeConfig)
+	out := buildManagedServicesStatus(nodeConfig, "http://worker:12090")
 	if out == nil || len(out.Services) != 1 {
 		t.Fatalf("expected one service, got %+v", out)
 	}
@@ -335,7 +344,7 @@ func TestBuildManagedServicesStatus_NonPMAServiceStaysStarting(t *testing.T) {
 			},
 		},
 	}
-	out := buildManagedServicesStatus(nodeConfig)
+	out := buildManagedServicesStatus(nodeConfig, "")
 	if out == nil || len(out.Services) != 1 {
 		t.Fatalf("expected one service, got %+v", out)
 	}
@@ -365,7 +374,7 @@ func TestBuildManagedServicesStatus_ExplicitProxyURLs(t *testing.T) {
 			},
 		},
 	}
-	out := buildManagedServicesStatus(nodeConfig)
+	out := buildManagedServicesStatus(nodeConfig, "")
 	if out == nil || len(out.Services) != 1 {
 		t.Fatalf("expected one service, got %+v", out)
 	}

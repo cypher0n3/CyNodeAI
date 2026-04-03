@@ -123,7 +123,7 @@ func TestNodeHandler_ReportCapabilityWithSandbox(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", "", nil, "", "", logger)
 
 	node := &models.Node{
 		NodeBase: models.NodeBase{
@@ -197,7 +197,7 @@ func TestNodeHandler_NewNodeRegistrationJWTError(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", "", nil, "", "", logger)
 
 	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk-secret",
@@ -247,7 +247,7 @@ func TestNodeHandler_ExistingNodeJWTError(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	mockDB.AddNode(node)
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", nil, "", "", logger)
 
 	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",
@@ -306,7 +306,7 @@ func TestAuthHandler_RefreshInvalidUserID(t *testing.T) {
 	rateLimiter := auth.NewRateLimiter(100, time.Minute)
 	logger := newTestLogger()
 
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
+	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, nil, "", "", logger)
 
 	// Generate a token with invalid user ID format - create a custom JWT
 	// This is hard to test without modifying JWT generation, so test other paths
@@ -344,7 +344,7 @@ func TestNodeHandler_ReportCapabilityUpdateErrors(t *testing.T) {
 	}
 	mockDB.AddNode(node)
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", nil, "", "", logger)
 
 	report := nodepayloads.CapabilityReport{
 		Version: 1,
@@ -411,7 +411,7 @@ func TestNodeHandler_RegisterExistingNode_UpdateNodeStatusFails(t *testing.T) {
 	}
 	mockDB.AddNode(node)
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", newTestLogger())
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", nil, "", "", newTestLogger())
 
 	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",
@@ -443,7 +443,7 @@ func (m *createNodeErrorStore) CreateNode(_ context.Context, _ string) (*models.
 func TestNodeHandler_RegisterNewNode_CreateNodeFails(t *testing.T) {
 	mockDB := &createNodeErrorStore{MockDB: testutil.NewMockDB()}
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", newTestLogger())
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", nil, "", "", newTestLogger())
 
 	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",

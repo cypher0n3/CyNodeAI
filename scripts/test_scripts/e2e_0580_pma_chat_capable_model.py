@@ -32,7 +32,7 @@ class TestPMAChatCapableModel(unittest.TestCase):
     """
 
     tags = ["suite_orchestrator", "pma_inference", "chat", "chat_capable"]
-    prereqs = ["gateway", "config", "auth", "ollama"]
+    prereqs = ["gateway", "config", "auth", "ollama", "pma_chat"]
 
     def setUp(self):
         ok, detail = helpers.prepare_e2e_cynork_auth()

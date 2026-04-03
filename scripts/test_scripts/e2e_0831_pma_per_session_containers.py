@@ -1,7 +1,8 @@
-# E2E: Per-session PMA instances — greedy provision on login creates distinct pma-sb-* workers.
-# Observes container runtime (cynodeai-managed-pma-sb-*) per orchestrator_bootstrap.md /
-# REQ-ORCHES-0190; worker GET .../telemetry/containers is not fed for managed PMA by node-manager.
-# Traces: docs/dev_docs/_plan_005_pma_provisioning.md; docs/tech_specs/orchestrator_bootstrap.md.
+# E2E: PMA warm pool — greedy provision assigns pma-pool-* slots; idle spares stay running.
+# Observes container runtime (cynodeai-managed-pma-pool-*) per orchestrator_bootstrap.md /
+# REQ-ORCHES-0190, REQ-ORCHES-0192; worker GET .../telemetry/containers is not fed for managed PMA.
+# Traces: REQ-ORCHES-0188, REQ-ORCHES-0190, REQ-ORCHES-0192;
+# docs/dev_docs/_plan_005_pma_provisioning.md; docs/tech_specs/orchestrator_bootstrap.md.
 
 import unittest
 
@@ -10,19 +11,19 @@ import scripts.test_scripts.e2e_state as state
 
 
 class TestPmaPerSessionContainers(unittest.TestCase):
-    """Two sequential gateway logins yield two additional pma-sb managed containers."""
+    """Warm pool PMA on login; pool shrinks when sessions end (logout or revoke)."""
 
     tags = [
         "suite_orchestrator",
         "full_demo",
+        "no_inference",
         "pma",
-        "pma_inference",
     ]
     prereqs = ["gateway", "config", "auth", "node_register"]
 
     @classmethod
     def tearDownClass(cls):
-        """Revoke admin sessions so orchestrator tears down PMA bindings; worker removes pma-sb-*."""
+        """Revoke sessions; pool shrinks to minimum warm baseline (one pma-pool-*)."""
         if not helpers.container_runtime_ps_available():
             return
         state.init_config()
@@ -39,7 +40,7 @@ class TestPmaPerSessionContainers(unittest.TestCase):
             )
         if not helpers.wait_until_runtime_pma_sb_empty(timeout_sec=180, poll_sec=4):
             raise AssertionError(
-                "cleanup: expected no cynodeai-managed-pma-sb-* after revoke_sessions; "
+                "cleanup: expected <=1 cynodeai-managed-pma-pool-* after revoke_sessions; "
                 f"still {sorted(helpers.runtime_pma_sb_container_name_set())!r}"
             )
         ok_auth, detail = helpers.prepare_e2e_cynork_auth()
@@ -50,25 +51,30 @@ class TestPmaPerSessionContainers(unittest.TestCase):
         ok, detail = helpers.prepare_e2e_cynork_auth()
         self.assertTrue(ok, detail)
         if not helpers.container_runtime_ps_available():
-            self.skipTest("podman or docker ps not available (exit non-zero or missing binary)")
+            self.skipTest(
+                "podman or docker ps not available (exit non-zero or missing binary)"
+            )
 
-    def test_two_sequential_logins_add_two_pma_sb_containers(self):
-        """Each POST /v1/auth/login creates a refresh session; greedy PMA adds pma-sb-* on the worker."""
+    def test_two_sequential_logins_expand_pma_warm_pool(self):
+        """Two sessions => pool size at least sessions + min free (default 3 containers)."""
         before_sb = helpers.runtime_pma_sb_container_name_set()
 
         for _ in range(2):
             acc, ref = helpers.fetch_gateway_login_tokens(timeout=60)
             self.assertTrue(acc, "gateway login must return access_token")
-            self.assertTrue(ref, "gateway login must return refresh_token for session binding key")
+            self.assertTrue(
+                ref,
+                "gateway login must return refresh_token for session binding key",
+            )
 
-        ok, new_sb, _all_sb = helpers.wait_for_at_least_new_pma_sb_container_names(
-            before_sb, 2, timeout_sec=180, poll_sec=4
+        ok, _, last_ct = helpers.wait_for_runtime_pma_sb_count_at_least(
+            3, timeout_sec=180, poll_sec=4
         )
         self.assertTrue(
             ok,
             (
-                "expected 2 new cynodeai-managed-pma-sb-* containers after 2 logins; "
-                f"new={sorted(new_sb)!r} before_count={len(before_sb)}"
+                "expected >=3 cynodeai-managed-pma-pool-* after 2 concurrent sessions + spare; "
+                f"last_count={last_ct} before={sorted(before_sb)!r}"
             ),
         )
 
@@ -77,36 +83,73 @@ class TestPmaPerSessionContainers(unittest.TestCase):
         st, _me = helpers.gateway_request("GET", "/v1/users/me", token, timeout=60)
         self.assertEqual(st, 200, "gateway still accepts bearer after extra logins")
 
-    def test_gateway_logout_removes_session_pma_container(self):
-        """Logout with that login's refresh_token drops binding; worker removes pma-sb container."""
+    def test_admin_revoke_sessions_shrinks_pma_warm_pool(self):
+        """Admin revoke_sessions ends sessions; pool returns to minimum warm size (<=1 slot)."""
         before_sb = helpers.runtime_pma_sb_container_name_set()
         acc, ref = helpers.fetch_gateway_login_tokens(timeout=60)
         self.assertTrue(acc, "login access_token")
-        self.assertTrue(ref, "login refresh_token for logout + binding")
+        self.assertTrue(ref, "login refresh_token")
 
-        ok_new, new_sb, _ = helpers.wait_for_at_least_new_pma_sb_container_names(
-            before_sb, 1, timeout_sec=180, poll_sec=4
+        if not helpers.pma_pool_login_unlikely_to_add_new_names(len(before_sb)):
+            ok_new, _, _ = helpers.wait_for_at_least_new_pma_sb_container_names(
+                before_sb, 1, timeout_sec=180, poll_sec=4
+            )
+            self.assertTrue(
+                ok_new,
+                f"expected pool growth vs before login; before={sorted(before_sb)!r}",
+            )
+
+        ok_revoke, st, body = helpers.gateway_admin_revoke_sessions_for_me(
+            acc, timeout=60
         )
         self.assertTrue(
-            ok_new,
-            f"expected new pma-sb container after login; new={sorted(new_sb)!r}",
+            ok_revoke,
+            f"revoke_sessions expected 204, st={st} body={body[:400]!r}",
         )
-        # new_sb may include >1 name if other sessions raced; logout removes this session's binding only.
-        new_ones = set(new_sb)
 
-        ok_out, st, body = helpers.gateway_logout(acc, ref, timeout=60)
+        shrunk = helpers.wait_until_runtime_pma_pool_at_most(
+            1, timeout_sec=180, poll_sec=4
+        )
+        self.assertTrue(
+            shrunk,
+            (
+                "expected <=1 warm pool container after revoke_sessions; "
+                f"still {sorted(helpers.runtime_pma_sb_container_name_set())!r}"
+            ),
+        )
+
+    def test_gateway_logout_shrinks_pma_warm_pool(self):
+        """Two sessions expand the pool; logging out one session shrinks container count."""
+        before_sb = helpers.runtime_pma_sb_container_name_set()
+        acc1, ref1 = helpers.fetch_gateway_login_tokens(timeout=60)
+        acc2, ref2 = helpers.fetch_gateway_login_tokens(timeout=60)
+        self.assertTrue(acc1 and ref1 and acc2 and ref2, "two gateway sessions")
+
+        if not helpers.pma_pool_login_unlikely_to_add_new_names(len(before_sb)):
+            ok_new, _, _ = helpers.wait_for_at_least_new_pma_sb_container_names(
+                before_sb, 1, timeout_sec=180, poll_sec=4
+            )
+            self.assertTrue(ok_new, "expected pool growth after two logins")
+        mid = helpers.runtime_pma_sb_container_name_set()
+        self.assertGreaterEqual(
+            len(mid),
+            2,
+            f"expected >=2 warm pool containers with two sessions; got {sorted(mid)!r}",
+        )
+
+        ok_out, st, body = helpers.gateway_logout(acc1, ref1, timeout=60)
         self.assertTrue(
             ok_out,
             f"logout expected 200/204, got {st} {body[:300]!r}",
         )
 
-        gone = helpers.wait_until_some_pma_sb_names_removed(
-            new_ones, timeout_sec=180, poll_sec=4
+        shrunk = helpers.wait_until_runtime_pma_sb_count_below(
+            len(mid), timeout_sec=180, poll_sec=4
         )
         self.assertTrue(
-            gone,
+            shrunk,
             (
-                "expected at least one new pma-sb container removed after logout "
-                f"(orchestrator teardown + worker reconcile); still have all of {sorted(new_ones)!r}"
+                "expected warm pool to shrink after one logout; "
+                f"still at {len(helpers.runtime_pma_sb_container_name_set())} from {len(mid)}"
             ),
         )

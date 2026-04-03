@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Called from setup-dev stop: tear down per-session PMA bindings and invalidate refresh sessions
-# while control-plane is still up, so the next start only runs pma-main (+ no pma-sb until login).
+# Called from setup-dev stop: clear PMA session bindings and invalidate refresh sessions while
+# control-plane is still up. After reset, desired state is idle warm pool only until login assigns slots.
 # Requires: same NODE_REGISTRATION_PSK the stack uses for node registration.
 set -euo pipefail
 root="${1:-}"
@@ -19,4 +19,4 @@ if ! curl -sfS -m 15 -X POST "$url" -H "Authorization: Bearer ${psk}" -o /dev/nu
   echo "[WARN] setup_dev_reset_session_state: POST ${url} failed (control-plane down?); continuing stop" >&2
   exit 0
 fi
-echo "[INFO] Dev session + PMA binding state reset (per-session pma-sb cleared in DB)."
+echo "[INFO] Dev session + PMA binding state reset (session bindings cleared in DB)."

@@ -122,3 +122,19 @@ func (m *MockDB) TouchActiveSessionBindingsForUser(_ context.Context, userID uui
 		return nil
 	})
 }
+
+// TouchSessionBindingByKey sets last_activity_at on the active binding for binding_key.
+func (m *MockDB) TouchSessionBindingByKey(_ context.Context, bindingKey string, at time.Time) error {
+	return runWithWLockErr(m, func() error {
+		if m.ForceError != nil {
+			return m.ForceError
+		}
+		b, ok := m.SessionBindingsByKey[bindingKey]
+		if !ok || b.State != models.SessionBindingStateActive {
+			return nil
+		}
+		b.LastActivityAt = &at
+		b.UpdatedAt = at
+		return nil
+	})
+}

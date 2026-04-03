@@ -35,6 +35,7 @@ const stateKey ctxKey = 0
 
 type workerTestState struct {
 	server               *httptest.Server
+	exec                 *executor.Executor
 	bearerToken          string
 	lastStatus           int
 	lastBody             []byte
@@ -58,6 +59,7 @@ type workerTestState struct {
 	secureStoreOpenErr    error
 	// Phase 7 desired-state: mock config may include managed_services; record StartManagedServices call
 	mockConfigWithManagedServices bool
+	mockManagedServicesFromSteps  []nodepayloads.ConfigManagedService
 	managedServicesStarted        []nodepayloads.ConfigManagedService
 	// Inference backend variant/image for config (REQ-WORKER-0253)
 	mockInferenceBackendVariant string
@@ -294,7 +296,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // InitializeWorkerNodeSuite sets up the godog suite for worker_node features.
 func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState) {
 	sc.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
-		exec := executor.New(
+		state.exec = executor.New(
 			getEnv("CONTAINER_RUNTIME", "direct"),
 			30*time.Second,
 			1<<20,
@@ -302,17 +304,16 @@ func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState
 			"",
 			nil,
 		)
+		// Fixed token for BDD: host WORKER_API_BEARER_TOKEN (e.g. from setup-dev) must not replace the mux
+		// secret or steps that pass Authorization: Bearer test-bearer-token get 401.
 		state.bearerToken = "test-bearer-token"
-		if t := os.Getenv("WORKER_API_BEARER_TOKEN"); t != "" {
-			state.bearerToken = t
-		}
 		state.telemetryStateDir, _ = os.MkdirTemp("", "bdd-telemetry-")
 		if state.telemetryStateDir != "" {
 			if ts, err := telemetry.Open(ctx, state.telemetryStateDir); err == nil {
 				state.telemetryStore = ts
 			}
 		}
-		state.server = httptest.NewServer(workerMux(exec, state.bearerToken, state.telemetryStore))
+		state.server = httptest.NewServer(workerMux(state.exec, state.bearerToken, state.telemetryStore))
 		return context.WithValue(ctx, stateKey, state), nil
 	})
 
@@ -349,6 +350,7 @@ func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState
 		state.managedServiceRunArgs = nil
 		state.secureStoreOpenErr = nil
 		state.mockConfigWithManagedServices = false
+		state.mockManagedServicesFromSteps = nil
 		state.managedServicesStarted = nil
 		state.mockInferenceBackendVariant = ""
 		state.mockInferenceBackendImage = ""
@@ -539,10 +541,14 @@ func RegisterWorkerNodeSteps(sc *godog.ScenarioContext, state *workerTestState) 
 	})
 	sc.Step(`^a Worker API is running with bearer token "([^"]*)"$`, func(ctx context.Context, token string) error {
 		st := getWorkerState(ctx)
-		if st == nil || st.server == nil {
+		if st == nil || st.exec == nil {
 			return fmt.Errorf("worker API not started")
 		}
 		st.bearerToken = token
+		if st.server != nil {
+			st.server.Close()
+		}
+		st.server = httptest.NewServer(workerMux(st.exec, st.bearerToken, st.telemetryStore))
 		return nil
 	})
 	sc.Step(`^I call GET "([^"]*)" with bearer token "([^"]*)"$`, func(ctx context.Context, path, token string) error {

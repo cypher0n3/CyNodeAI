@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/natsjwt"
 )
 
 // Well-known dev defaults shipped in LoadOrchestratorConfig. When ORCHESTRATOR_DEV_MODE=false,
@@ -80,6 +82,8 @@ type OrchestratorConfig struct {
 	// PMABaseURL is deprecated for chat routing. PMA is only reachable via worker-reported capability (orchestrator ↔ worker proxy). Kept for backward compat / other use.
 	PMABaseURL string // PMA_BASE_URL; not used for resolvePMAEndpoint
 	// PMA managed-service desired-state defaults (worker-managed PMA path).
+	// PMA_SERVICE_ID is reserved for bootstrap/main PMA. Session-backed workers use pma-pool-* warm pool
+	// sizing via PMA_WARM_POOL_MIN_FREE and PMA_WARM_POOL_MAX_SLOTS (see handlers/pma_pool.go).
 	PMAServiceID       string // PMA_SERVICE_ID
 	PMAImage           string // PMA_IMAGE
 	PMAHostNodeSlug    string // PMA_HOST_NODE_SLUG (optional explicit placement override)
@@ -87,6 +91,15 @@ type OrchestratorConfig struct {
 
 	// Workflow runner: bearer token for workflow start/resume/checkpoint/release API. When set, requests must include Authorization: Bearer <value>.
 	WorkflowRunnerBearerToken string // WORKFLOW_RUNNER_BEARER_TOKEN; optional
+
+	// NATS: URLs and account signing material (decentralized JWT). See docs/tech_specs/nats_messaging.md.
+	NATSClientURL string // NATS_CLIENT_URL (fallback NATS_URL); emitted to clients in login/bootstrap.
+	// NATSServerURL is the broker URL this process dials for JetStream/service connections (optional).
+	// In Compose, set NATS_SERVER_URL=nats://nats:4222 while NATS_CLIENT_URL stays host-reachable for clients.
+	NATSServerURL          string // NATS_SERVER_URL
+	NATSWebSocketURL       string // NATS_WEBSOCKET_URL; Web Console / ws clients.
+	NATSAccountSeed        string // NATS_ACCOUNT_SEED; NKey seed for account public id (dev default from natsjwt when DevMode).
+	NATSAccountSigningSeed string // NATS_ACCOUNT_SIGNING_SEED; signing key for user JWTs.
 
 	// DevMode when true allows JWT, node PSK, worker API bearer, and bootstrap admin password to match
 	// the well-known defaults above (local dev and E2E). Set ORCHESTRATOR_DEV_MODE=false in production
@@ -136,7 +149,7 @@ type NodeConfig struct {
 
 // LoadOrchestratorConfig loads configuration from environment.
 func LoadOrchestratorConfig() *OrchestratorConfig {
-	return &OrchestratorConfig{
+	cfg := &OrchestratorConfig{
 		DatabaseURL:                     getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/cynodeai?sslmode=disable"),
 		ListenAddr:                      getEnv("LISTEN_ADDR", ":12080"),
 		ReadTimeout:                     getDurationEnv("READ_TIMEOUT", 30*time.Second),
@@ -181,7 +194,45 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		ArtifactStaleCleanupEnabled:     getBoolEnv("ARTIFACT_STALE_CLEANUP_ENABLED", false),
 		ArtifactStaleCleanupInterval:    getDurationEnv("ARTIFACT_STALE_CLEANUP_INTERVAL", time.Hour),
 		ArtifactStaleCleanupMaxAgeHours: getIntEnv("ARTIFACT_STALE_CLEANUP_MAX_AGE_HOURS", 0),
+		NATSClientURL:                   getEnv("NATS_CLIENT_URL", getEnv("NATS_URL", "nats://127.0.0.1:4222")),
+		NATSServerURL:                   getEnv("NATS_SERVER_URL", ""),
+		NATSWebSocketURL:                getEnv("NATS_WEBSOCKET_URL", "ws://127.0.0.1:8223/nats"),
+		NATSAccountSeed:                 getEnv("NATS_ACCOUNT_SEED", ""),
+		NATSAccountSigningSeed:          getEnv("NATS_ACCOUNT_SIGNING_SEED", ""),
 	}
+	return cfg
+}
+
+// NATSDialURL returns the broker address for server-side NATS connections (gateway, control-plane).
+func (c *OrchestratorConfig) NATSDialURL() string {
+	if c == nil {
+		return ""
+	}
+	if s := strings.TrimSpace(c.NATSServerURL); s != "" {
+		return s
+	}
+	return c.NATSClientURL
+}
+
+// ResolveNATSSeeds fills NATS account/signing seeds in DevMode when unset, using LoadDevSeeds (env, file, or generated).
+func ResolveNATSSeeds(cfg *OrchestratorConfig) error {
+	if cfg == nil || !cfg.DevMode {
+		return nil
+	}
+	if cfg.NATSAccountSeed != "" && cfg.NATSAccountSigningSeed != "" {
+		return nil
+	}
+	s, err := natsjwt.LoadDevSeeds()
+	if err != nil {
+		return fmt.Errorf("nats dev seeds: %w", err)
+	}
+	if cfg.NATSAccountSeed == "" {
+		cfg.NATSAccountSeed = s.CynodeAccount
+	}
+	if cfg.NATSAccountSigningSeed == "" {
+		cfg.NATSAccountSigningSeed = s.CynodeSigning
+	}
+	return nil
 }
 
 // ValidateSecrets returns an error when DevMode is false and any of JWT, node PSK, worker API bearer,

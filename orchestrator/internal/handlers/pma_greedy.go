@@ -40,7 +40,10 @@ func LastGreedyPMAIssueForTest() *GreedyPMAIssue {
 func GreedyProvisionPMAAfterInteractiveSession(ctx context.Context, db database.Store, userID, interactiveSessionID uuid.UUID, logger *slog.Logger) error {
 	lineage := models.SessionBindingLineage{UserID: userID, SessionID: interactiveSessionID, ThreadID: nil}
 	key := models.DeriveSessionBindingKey(lineage)
-	svcID := models.PMAServiceIDForBindingKey(key)
+	svcID, pickErr := pickPMAPoolServiceIDForGreedy(ctx, db, userID, interactiveSessionID, logger)
+	if pickErr != nil {
+		return pickErr
+	}
 	if _, err := db.UpsertSessionBinding(ctx, lineage, svcID, models.SessionBindingStateActive); err != nil {
 		return err
 	}

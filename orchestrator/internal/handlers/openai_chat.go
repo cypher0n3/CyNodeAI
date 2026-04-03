@@ -23,6 +23,7 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/inference"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/natsjwt"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/pmaclient"
 )
 
@@ -72,6 +73,7 @@ type OpenAIChatHandler struct {
 	inferenceURL         string
 	inferenceModel       string
 	workerAPIBearerToken string
+	gatewayPub           *GatewaySessionPublisher
 }
 
 // NewOpenAIChatHandler creates a handler for the OpenAI-compatible chat surface.
@@ -88,6 +90,13 @@ func NewOpenAIChatHandler(db database.OpenAIChatHandlerDeps, logger *slog.Logger
 		inferenceModel:       inferenceModel,
 		workerAPIBearerToken: workerAPIBearerToken,
 	}
+}
+
+// SetGatewaySessionActivity wires JetStream publishing for session.activity derived from gateway API traffic
+// (PMA chat, etc.). Per nats_messaging.md, NATS-connected clients may also publish activity directly;
+// the gateway publishes on behalf of REST-only traffic whenever JetStream is available.
+func (h *OpenAIChatHandler) SetGatewaySessionActivity(pub *GatewaySessionPublisher) {
+	h.gatewayPub = pub
 }
 
 // ListModels returns GET /v1/models in OpenAI list-models format.
@@ -141,6 +150,17 @@ func (h *OpenAIChatHandler) tryPMAStream(ctx context.Context, w http.ResponseWri
 	return true
 }
 
+func (h *OpenAIChatHandler) touchPMAModelActivity(ctx context.Context, userID uuid.UUID) {
+	if err := TouchPMABindingActivity(ctx, h.db, userID); err != nil {
+		h.logger.Warn("touch pma binding activity", "error", err)
+	}
+	if h.gatewayPub != nil {
+		if err := h.gatewayPub.PublishActivity(ctx, h.db, natsjwt.DefaultTenantID, userID); err != nil {
+			h.logger.Debug("gateway nats session activity", "error", err)
+		}
+	}
+}
+
 // ChatCompletions handles POST /v1/chat/completions with pipeline: auth (already done), decode, project_id, redact, persist user message, route, persist assistant, return.
 // When stream=true is requested the response uses Server-Sent Events per CYNAI.USRGWY.OpenAIChatApi.Streaming.
 func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -161,9 +181,7 @@ func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Reque
 		effectiveModel = EffectiveModelPM
 	}
 	if effectiveModel == EffectiveModelPM {
-		if err := TouchPMABindingActivity(ctx, h.db, *userID); err != nil {
-			h.logger.Warn("touch pma binding activity", "error", err)
-		}
+		h.touchPMAModelActivity(ctx, *userID)
 	}
 	projectID := projectIDFromHeader(r)
 	redacted, kinds := redactSecrets(req.Messages)
@@ -634,14 +652,14 @@ func (h *OpenAIChatHandler) resolvePMAEndpointCandidate(ctx context.Context, use
 		}
 	}
 	if len(matched) == 0 {
-		// Stale binding (teardown removed PMA from worker snapshot but row remains): do not
-		// fail closed; fall back like the no-binding case so chat can recover after restarts.
+		// Per-session PMA only: never route a user to another binding's container while this
+		// row is still active (wait for worker to report the matching service_id as ready).
 		h.logger.Warn(
-			"session binding service_id not in worker PMA snapshot; falling back to latest ready PMA",
+			"session binding service_id not in worker PMA snapshot; refusing cross-session PMA fallback",
 			"user_id", userID,
 			"binding_service_id", b.ServiceID,
 		)
-		return pickLatestReadyPMAEndpointCandidate(candidates)
+		return pmaEndpointCandidate{}
 	}
 	return pickLatestReadyPMAEndpointCandidate(matched)
 }
@@ -680,7 +698,8 @@ type pmaEndpointCandidate struct {
 }
 
 func (h *OpenAIChatHandler) collectReadyPMACandidates(ctx context.Context) []pmaEndpointCandidate {
-	nodes, err := h.db.ListActiveNodes(ctx)
+	// Dispatchable nodes only: matches /readyz inference path and worker API routing.
+	nodes, err := h.db.ListDispatchableNodes(ctx)
 	if err != nil || len(nodes) == 0 {
 		return nil
 	}

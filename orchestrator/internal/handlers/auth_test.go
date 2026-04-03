@@ -15,10 +15,11 @@ import (
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/natsjwt"
 )
 
 func TestNewAuthHandler(t *testing.T) {
-	handler := NewAuthHandler(nil, nil, nil, nil)
+	handler := NewAuthHandler(nil, nil, nil, nil, "", "", nil)
 	if handler == nil {
 		t.Fatal("NewAuthHandler returned nil")
 	}
@@ -314,4 +315,107 @@ func TestAuditLogWithNonEmptyDetails(t *testing.T) {
 
 	// Should not panic with nil db and nil logger
 	handler.auditLog(context.Background(), &userID, "test", true, "1.2.3.4", "agent", "details")
+}
+
+func TestAuthHandler_SetGatewaySessionPublisher(t *testing.T) {
+	h := NewAuthHandler(nil, nil, nil, nil, "", "", nil)
+	h.SetGatewaySessionPublisher(nil)
+}
+
+func TestAuthHandler_SetGatewaySessionPublisher_ClearsAfterNonNil(t *testing.T) {
+	nc, js, cleanup := testJetStream(t)
+	defer cleanup()
+	h := NewAuthHandler(nil, nil, nil, nil, "", "", nil)
+	h.SetGatewaySessionPublisher(NewGatewaySessionPublisher(nc, js))
+	if h.gatewayPub == nil {
+		t.Fatal("expected publisher")
+	}
+	h.SetGatewaySessionPublisher(nil)
+	if h.gatewayPub != nil {
+		t.Fatal("expected nil after Set(nil)")
+	}
+}
+
+func TestNewAuthHandler_WithNatsIssuer(t *testing.T) {
+	iss, err := natsjwt.NewDevIssuer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewAuthHandler(nil, nil, nil, iss, "nats://127.0.0.1:4222", "ws://127.0.0.1:8223/nats", nil)
+	if h.natsJTI == nil {
+		t.Fatal("expected natsJTI map")
+	}
+}
+
+func TestAuthHandler_recordSessionNatsMode(t *testing.T) {
+	h := NewAuthHandler(nil, nil, nil, nil, "", "", nil)
+	id := uuid.New()
+	h.recordSessionNatsMode(id, true)
+	h.recordSessionNatsMode(id, false)
+	h.sessionNatsMu.Lock()
+	v := h.sessionNatsFromClient[id]
+	h.sessionNatsMu.Unlock()
+	if v {
+		t.Fatal("expected false")
+	}
+}
+
+func TestAuthHandler_registerNatsSessionAndRevoke(t *testing.T) {
+	iss, err := natsjwt.NewDevIssuer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewAuthHandler(nil, nil, nil, iss, "", "", nil)
+	sid := uuid.New()
+	h.registerNatsSession(sid, "jti-test")
+	h.natsMu.Lock()
+	_, ok := h.natsJTI[sid]
+	h.natsMu.Unlock()
+	if !ok {
+		t.Fatal("expected session registered")
+	}
+	h.revokeNatsSession(sid)
+	h.natsMu.Lock()
+	_, ok = h.natsJTI[sid]
+	h.natsMu.Unlock()
+	if ok {
+		t.Fatal("expected session revoked")
+	}
+}
+
+func TestAuthHandler_applyNatsToLoginResponse(t *testing.T) {
+	iss, err := natsjwt.NewDevIssuer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewAuthHandler(nil, nil, nil, iss, "nats://127.0.0.1:4222", "ws://127.0.0.1:8223/nats", nil)
+	resp := &userapi.LoginResponse{}
+	sid := uuid.New()
+	exp := time.Now().Add(time.Hour)
+	h.applyNatsToLoginResponse(resp, sid, exp)
+	if resp.Nats == nil || resp.Nats.JWT == "" || resp.Nats.URL == "" {
+		t.Fatalf("expected nats block: %#v", resp.Nats)
+	}
+}
+
+func TestAuthHandler_revokeNatsSession(t *testing.T) {
+	iss, err := natsjwt.NewDevIssuer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewAuthHandler(nil, nil, nil, iss, "", "", nil)
+	sid := uuid.New()
+	tok, err := iss.SessionJWT(natsjwt.DefaultTenantID, sid, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	jti, err := natsjwt.ExtractJTI(tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.registerNatsSession(sid, jti)
+	h.revokeNatsSession(sid)
+	if !iss.Revoked(jti) {
+		t.Fatal("expected jti revoked")
+	}
 }

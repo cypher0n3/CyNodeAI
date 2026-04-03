@@ -13,6 +13,10 @@ require (
 	github.com/cypher0n3/cynodeai/go_shared_libs v0.0.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
+	github.com/nats-io/jwt/v2 v2.8.0
+	github.com/nats-io/nats-server/v2 v2.12.2
+	github.com/nats-io/nats.go v1.50.0
+	github.com/nats-io/nkeys v0.4.15
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
@@ -25,6 +29,7 @@ require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/antithesishq/antithesis-sdk-go v0.4.3-default-no-op // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.8 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.20 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.20 // indirect
@@ -61,6 +66,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
+	github.com/google/go-tpm v0.9.6 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-memdb v1.3.5 // indirect
@@ -71,9 +77,10 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	github.com/klauspost/compress v1.18.0 // indirect
+	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/lufia/plan9stats v0.0.0-20250317134145-8bc96cf8fc35 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
+	github.com/minio/highwayhash v1.0.4-0.20251030100505-070ab1a87a76 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.1.0 // indirect
 	github.com/moby/patternmatcher v0.6.0 // indirect
@@ -82,6 +89,7 @@ require (
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
+	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -105,7 +113,7 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
-	golang.org/x/time v0.9.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/grpc v1.79.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

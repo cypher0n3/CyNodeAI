@@ -164,7 +164,7 @@ func SendConfigAck(ctx context.Context, cfg *Config, bootstrap *BootstrapData, n
 		ConfigVersion:         nodeConfig.ConfigVersion,
 		AckAt:                 time.Now().UTC().Format(time.RFC3339),
 		Status:                status,
-		ManagedServicesStatus: buildManagedServicesStatus(nodeConfig),
+		ManagedServicesStatus: buildManagedServicesStatus(nodeConfig, strings.TrimSpace(cfg.AdvertisedWorkerAPIURL)),
 	}
 	body, err := json.Marshal(ack)
 	if err != nil {
@@ -325,6 +325,7 @@ func register(ctx context.Context, cfg *Config) (*BootstrapData, error) {
 		ExpiresAt:     bootstrap.Auth.ExpiresAt,
 		NodeReportURL: bootstrap.Orchestrator.Endpoints.NodeReportURL,
 		NodeConfigURL: bootstrap.Orchestrator.Endpoints.NodeConfigURL,
+		Nats:          bootstrap.Nats,
 	}, nil
 }
 
@@ -505,11 +506,22 @@ func buildCapability(ctx context.Context, cfg *Config, nodeConfig *nodepayloads.
 		Running:         running,
 		AvailableModels: detectAvailableModels(ctx),
 	}
-	report.ManagedServicesStatus = buildManagedServicesStatus(nodeConfig)
+	report.ManagedServicesStatus = buildManagedServicesStatus(
+		nodeConfig,
+		strings.TrimSpace(cfg.AdvertisedWorkerAPIURL),
+	)
 	return report
 }
 
-func buildManagedServicesStatus(nodeConfig *nodepayloads.NodeConfigurationPayload) *nodepayloads.ManagedServicesStatus {
+// buildManagedServicesStatus builds managed_services_status for config ack and capability reports.
+// advertisedWorkerAPIBase is the node manager's advertised worker API base URL (same as Config.AdvertisedWorkerAPIURL);
+// when empty, NODE_ADVERTISED_WORKER_API_URL is used so PMA reports ready with the worker proxy endpoint.
+//
+//nolint:gocognit // Per-service branch matrix (PMA/SBA paths, URLs, GPU) kept explicit for readability.
+func buildManagedServicesStatus(
+	nodeConfig *nodepayloads.NodeConfigurationPayload,
+	advertisedWorkerAPIBase string,
+) *nodepayloads.ManagedServicesStatus {
 	if nodeConfig == nil || nodeConfig.ManagedServices == nil || len(nodeConfig.ManagedServices.Services) == 0 {
 		return nil
 	}
@@ -531,7 +543,10 @@ func buildManagedServicesStatus(nodeConfig *nodepayloads.NodeConfigurationPayloa
 		// The gateway must call the worker's proxy URL (not direct PMA) so the request reaches this node's PMA.
 		// Prefer worker proxy URL when NODE_ADVERTISED_WORKER_API_URL is set; fallback to PMA_ADVERTISED_URL for backward compat.
 		if serviceType == serviceTypePMA {
-			workerBase := strings.TrimSpace(getEnv("NODE_ADVERTISED_WORKER_API_URL", ""))
+			workerBase := strings.TrimSpace(advertisedWorkerAPIBase)
+			if workerBase == "" {
+				workerBase = strings.TrimSpace(getEnv("NODE_ADVERTISED_WORKER_API_URL", ""))
+			}
 			if workerBase != "" {
 				proxyURL := strings.TrimSuffix(workerBase, "/") + "/v1/worker/managed-services/" + serviceID + "/proxy:http"
 				status.State = "ready"

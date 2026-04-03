@@ -13,13 +13,16 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/natsutil"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/artifacts"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/handlers"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/middleware"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/natsjwt"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/readiness"
+	"github.com/nats-io/nats.go"
 )
 
 // testShutdownHook, when set by tests, is called instead of server.Shutdown so tests can cover the shutdown error path.
@@ -39,6 +42,10 @@ func runMain(ctx context.Context) int {
 	}))
 	slog.SetDefault(logger)
 	cfg := config.LoadOrchestratorConfig()
+	if err := config.ResolveNATSSeeds(cfg); err != nil {
+		logger.Error("nats dev seeds", "error", err)
+		return 1
+	}
 	if err := config.ValidateSecrets(cfg); err != nil {
 		logger.Error("invalid configuration", "error", err)
 		return 1
@@ -71,7 +78,31 @@ func runMainWithStore(ctx context.Context, cfg *config.OrchestratorConfig, store
 	return 0
 }
 
+func connectGatewaySessionNATS(
+	cfg *config.OrchestratorConfig,
+	natsIss *natsjwt.Issuer,
+	authHandler *handlers.AuthHandler,
+	openAI *handlers.OpenAIChatHandler,
+	logger *slog.Logger,
+) *nats.Conn {
+	nc, js, nerr := handlers.IssueGatewayNATSConnection(cfg.NATSDialURL(), natsIss)
+	if nerr != nil {
+		logger.Warn("nats gateway connect", "error", nerr)
+		return nil
+	}
+	if nc == nil {
+		return nil
+	}
+	handlers.SetJetStreamForConfigBump(js)
+	gwPub := handlers.NewGatewaySessionPublisher(nc, js)
+	authHandler.SetGatewaySessionPublisher(gwPub)
+	openAI.SetGatewaySessionActivity(gwPub)
+	return nc
+}
+
 // run sets up handlers and runs the server until ctx is canceled. Used by main and tests.
+//
+//nolint:gocognit // gateway wiring: NATS, handlers, mux, graceful shutdown
 func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Store, logger *slog.Logger) error {
 	jwtManager := auth.NewJWTManager(
 		cfg.JWTSecret,
@@ -81,11 +112,28 @@ func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Sto
 	)
 	rateLimiter := auth.NewRateLimiter(cfg.RateLimitPerMinute, time.Minute)
 
-	authHandler := handlers.NewAuthHandler(store, jwtManager, rateLimiter, logger)
+	var natsIss *natsjwt.Issuer
+	if cfg.NATSAccountSeed != "" && cfg.NATSAccountSigningSeed != "" {
+		var nerr error
+		natsIss, nerr = natsjwt.NewIssuer(cfg.NATSAccountSeed, cfg.NATSAccountSigningSeed)
+		if nerr != nil {
+			logger.Warn("nats jwt issuer disabled", "error", nerr)
+			natsIss = nil
+		}
+	}
+	authHandler := handlers.NewAuthHandler(store, jwtManager, rateLimiter, natsIss, cfg.NATSClientURL, cfg.NATSWebSocketURL, logger)
 	userHandler := handlers.NewUserHandler(store, logger)
 	taskHandler := handlers.NewTaskHandler(store, logger, cfg.InferenceURL, cfg.InferenceModel)
 	openAIChatHandler := handlers.NewOpenAIChatHandler(store, logger, cfg.InferenceURL, cfg.InferenceModel, cfg.WorkerAPIBearerToken)
 	skillsHandler := handlers.NewSkillsHandler(store, logger)
+
+	var gatewayNatsConn *nats.Conn
+	defer func() {
+		if gatewayNatsConn != nil {
+			_ = natsutil.CloseConn(gatewayNatsConn)
+		}
+	}()
+	gatewayNatsConn = connectGatewaySessionNATS(cfg, natsIss, authHandler, openAIChatHandler, logger)
 
 	var artSvc *artifacts.Service
 	if db, ok := store.(*database.DB); ok {

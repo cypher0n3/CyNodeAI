@@ -20,7 +20,7 @@ import (
 const testOrchestratorURL = "http://test-orchestrator"
 
 func TestNewNodeHandler(t *testing.T) {
-	handler := NewNodeHandler(nil, nil, "test-psk", testOrchestratorURL, "", "", "", nil)
+	handler := NewNodeHandler(nil, nil, "test-psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
 	if handler == nil {
 		t.Fatal("NewNodeHandler returned nil")
 	}
@@ -128,7 +128,7 @@ func TestNodeCapabilityReportJSON(t *testing.T) {
 
 func TestNodeBootstrapResponseJSON(t *testing.T) {
 	handler := &NodeHandler{orchestratorPublicURL: testOrchestratorURL}
-	resp := handler.buildBootstrapResponse(testOrchestratorURL, "test-jwt", time.Now().Add(time.Hour))
+	resp := handler.buildBootstrapResponse(testOrchestratorURL, "test-jwt", time.Now().Add(time.Hour), uuid.MustParse("00000000-0000-4000-8000-000000000001"))
 
 	jsonData, err := json.Marshal(resp)
 	if err != nil {
@@ -174,7 +174,7 @@ func TestBuildBootstrapResponse(t *testing.T) {
 	baseURL := testOrchestratorURL
 	expiresAt := time.Now().Add(time.Hour)
 
-	resp := handler.buildBootstrapResponse(baseURL, "test-jwt", expiresAt)
+	resp := handler.buildBootstrapResponse(baseURL, "test-jwt", expiresAt, uuid.MustParse("00000000-0000-4000-8000-000000000002"))
 
 	if resp.Version != 1 {
 		t.Errorf("expected version 1, got %d", resp.Version)
@@ -521,13 +521,20 @@ func TestBuildNodeConfigPayload_IncludesManagedServicesWhenSelected(t *testing.T
 		UpdatedAt: time.Now().UTC(),
 	}
 	mockDB.AddNode(node)
-	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "worker-api-token", "", "", nil)
+	u := uuid.New()
+	rs := uuid.New()
+	lineage := models.SessionBindingLineage{UserID: u, SessionID: rs, ThreadID: nil}
+	if _, err := mockDB.UpsertSessionBinding(t.Context(), lineage, "pma-pool-0", models.SessionBindingStateActive); err != nil {
+		t.Fatal(err)
+	}
+	addTestRefreshSession(t, mockDB, u, rs, []byte("h"))
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "worker-api-token", "", "", nil, "", "", nil)
 	payload := h.buildNodeConfigPayload(t.Context(), node, "cfg-1", "http://worker:12090")
-	if payload.ManagedServices == nil || len(payload.ManagedServices.Services) != 1 {
-		t.Fatalf("expected one managed service, got %+v", payload.ManagedServices)
+	if payload.ManagedServices == nil || len(payload.ManagedServices.Services) != 2 {
+		t.Fatalf("expected warm pool (assigned + idle), got %+v", payload.ManagedServices)
 	}
 	svc := payload.ManagedServices.Services[0]
-	if svc.ServiceType != "pma" || svc.ServiceID == "" {
+	if svc.ServiceType != "pma" || svc.ServiceID != "pma-pool-0" {
 		t.Errorf("unexpected managed service: %+v", svc)
 	}
 	if svc.Inference == nil || svc.Inference.BaseURL != "http://worker:11434" {
@@ -555,18 +562,26 @@ func TestBuildNodeConfigPayload_ManagedServicesIncludeAgentTokenWhenSet(t *testi
 		UpdatedAt: time.Now().UTC(),
 	}
 	mockDB.AddNode(node)
+	u := uuid.New()
+	rs := uuid.New()
+	lineage := models.SessionBindingLineage{UserID: u, SessionID: rs, ThreadID: nil}
+	if _, err := mockDB.UpsertSessionBinding(t.Context(), lineage, "pma-pool-0", models.SessionBindingStateActive); err != nil {
+		t.Fatal(err)
+	}
+	addTestRefreshSession(t, mockDB, u, rs, []byte("h2"))
 	const agentToken = "internal-agent-token-123"
-	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", agentToken, nil)
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", agentToken, nil, "", "", nil)
 	payload := h.buildNodeConfigPayload(t.Context(), node, "cfg-1", "http://worker:12090")
-	if payload.ManagedServices == nil || len(payload.ManagedServices.Services) != 1 {
-		t.Fatalf("expected one managed service, got %+v", payload.ManagedServices)
+	if payload.ManagedServices == nil || len(payload.ManagedServices.Services) != 2 {
+		t.Fatalf("expected warm pool (assigned + idle), got %+v", payload.ManagedServices)
 	}
-	svc := payload.ManagedServices.Services[0]
-	if svc.Orchestrator == nil {
-		t.Fatal("expected orchestrator block in managed service")
-	}
-	if svc.Orchestrator.AgentToken != agentToken {
-		t.Errorf("Orchestrator.AgentToken = %q, want %q", svc.Orchestrator.AgentToken, agentToken)
+	for _, svc := range payload.ManagedServices.Services {
+		if svc.Orchestrator == nil {
+			t.Fatal("expected orchestrator block on every managed service")
+		}
+		if svc.Orchestrator.AgentToken != agentToken {
+			t.Errorf("Orchestrator.AgentToken = %q, want %q", svc.Orchestrator.AgentToken, agentToken)
+		}
 	}
 }
 
@@ -584,7 +599,7 @@ func TestBuildNodeConfigPayload_OmitsManagedServicesWhenNotSelected(t *testing.T
 		UpdatedAt: time.Now().UTC(),
 	}
 	mockDB.AddNode(node)
-	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil)
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
 	payload := h.buildNodeConfigPayload(t.Context(), node, "cfg-1", "http://worker:12090")
 	if payload.ManagedServices != nil {
 		t.Errorf("expected no managed services for unselected node, got %+v", payload.ManagedServices)
@@ -628,7 +643,7 @@ func TestSelectPMAHostNodeSlug_PrefersLabeledNode(t *testing.T) {
 	}
 	raw, _ := json.Marshal(report)
 	_ = mockDB.SaveNodeCapabilitySnapshot(t.Context(), node2.ID, string(raw))
-	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil)
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
 	if got := h.selectPMAHostNodeSlug(t.Context(), "fallback-node"); got != "node-b" {
 		t.Errorf("selectPMAHostNodeSlug() = %q, want node-b", got)
 	}
@@ -704,13 +719,11 @@ func TestDeriveNodeLocalInferenceBaseURL(t *testing.T) {
 func TestSelectPMAHostNodeSlug_ExplicitOverride(t *testing.T) {
 	_ = os.Setenv("PMA_HOST_NODE_SLUG", "explicit-node")
 	defer func() { _ = os.Unsetenv("PMA_HOST_NODE_SLUG") }()
-	h := NewNodeHandler(testutil.NewMockDB(), nil, "psk", testOrchestratorURL, "", "", "", nil)
+	h := NewNodeHandler(testutil.NewMockDB(), nil, "psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
 	if got := h.selectPMAHostNodeSlug(t.Context(), "fallback"); got != "explicit-node" {
 		t.Errorf("selectPMAHostNodeSlug() = %q, want explicit-node", got)
 	}
 }
-
-// PMA is always required; there is no "disabled" state for managed services.
 
 func TestPMAModelCandidates(t *testing.T) {
 	tests := []struct {
@@ -740,7 +753,7 @@ func TestPMAModelCandidates(t *testing.T) {
 func TestSelectPMAModel_PinnedViaEnv(t *testing.T) {
 	_ = os.Setenv("INFERENCE_MODEL", "my-custom-model:7b")
 	defer func() { _ = os.Unsetenv("INFERENCE_MODEL") }()
-	h := NewNodeHandler(testutil.NewMockDB(), nil, "psk", testOrchestratorURL, "", "", "", nil)
+	h := NewNodeHandler(testutil.NewMockDB(), nil, "psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
 	got := h.selectPMAModel(t.Context(), uuid.New())
 	if got != "my-custom-model:7b" {
 		t.Errorf("selectPMAModel() = %q, want my-custom-model:7b", got)
@@ -774,7 +787,7 @@ func TestSelectPMAModel_PicksTopTierCandidate(t *testing.T) {
 	}
 	raw, _ := json.Marshal(report)
 	_ = mockDB.SaveNodeCapabilitySnapshot(t.Context(), node.ID, string(raw))
-	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil)
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
 	got := h.selectPMAModel(t.Context(), node.ID)
 	// 20 GB VRAM → ≥16000 tier → first candidate is qwen3.5:9b even if not yet pulled.
 	candidates := pmaModelCandidates(20464)
@@ -802,7 +815,7 @@ func TestSelectPMAModel_FallsBackToTopCandidate(t *testing.T) {
 	}
 	raw, _ := json.Marshal(report)
 	_ = mockDB.SaveNodeCapabilitySnapshot(t.Context(), node.ID, string(raw))
-	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil)
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
 	got := h.selectPMAModel(t.Context(), node.ID)
 	if got != pmaModelMid {
 		t.Errorf("selectPMAModel() no-GPU = %q, want %q", got, pmaModelMid)
@@ -811,7 +824,7 @@ func TestSelectPMAModel_FallsBackToTopCandidate(t *testing.T) {
 
 func TestSelectPMAModel_NoSnapshot(t *testing.T) {
 	_ = os.Unsetenv("INFERENCE_MODEL")
-	h := NewNodeHandler(testutil.NewMockDB(), nil, "psk", testOrchestratorURL, "", "", "", nil)
+	h := NewNodeHandler(testutil.NewMockDB(), nil, "psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
 	got := h.selectPMAModel(t.Context(), uuid.New())
 	// No snapshot → 0 VRAM → default tier first candidate.
 	if got != pmaModelMid {

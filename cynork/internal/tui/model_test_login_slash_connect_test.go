@@ -873,17 +873,29 @@ func (s *stubAuthProvider) SetShowThinkingByDefault(_ bool)   {}
 func (s *stubAuthProvider) ShowToolOutputByDefault() bool     { return false }
 func (s *stubAuthProvider) SetShowToolOutputByDefault(_ bool) {}
 
+func TestModel_Update_ProactiveTokenRefreshWhileLoading(t *testing.T) {
+	srv := newStubRefreshHTTPServer(t)
+	cl := gateway.NewClient(srv.URL)
+	cl.SetToken("old")
+	m := NewModel(&chat.Session{Client: cl})
+	m.SetAuthProvider(&stubAuthProvider{refresh: "rt"})
+	m.Loading = true
+	_, cmd := m.Update(proactiveTokenRefreshMsg{})
+	if cmd == nil {
+		t.Fatal("expected token refresh cmd while Loading (streaming)")
+	}
+	msg := cmd()
+	res, ok := msg.(tokenRefreshResultMsg)
+	if !ok {
+		t.Fatalf("got %T", msg)
+	}
+	if res.err != nil || res.resp == nil || res.resp.AccessToken != testStubRefreshedAccessToken {
+		t.Fatalf("refresh result: %+v err=%v", res.resp, res.err)
+	}
+}
+
 func TestModel_HandleProactiveTokenRefreshCmd(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/auth/refresh" && r.Method == http.MethodPost {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"access_token":"new","refresh_token":"nr","expires_in":3600}`))
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	t.Cleanup(srv.Close)
+	srv := newStubRefreshHTTPServer(t)
 	cl := gateway.NewClient(srv.URL)
 	cl.SetToken("old")
 	m := NewModel(&chat.Session{Client: cl})
@@ -897,7 +909,7 @@ func TestModel_HandleProactiveTokenRefreshCmd(t *testing.T) {
 	if !ok {
 		t.Fatalf("got %T", msg)
 	}
-	if res.err != nil || res.resp == nil || res.resp.AccessToken != "new" {
+	if res.err != nil || res.resp == nil || res.resp.AccessToken != testStubRefreshedAccessToken {
 		t.Fatalf("refresh result: %+v err=%v", res.resp, res.err)
 	}
 }

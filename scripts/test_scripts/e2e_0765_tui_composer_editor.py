@@ -159,13 +159,14 @@ class TestTuiComposerEditor(unittest.TestCase):
         """After sending a chat line, Ctrl+Up restores it into the composer."""
         if not harness.pty_available():
             self.skipTest("pexpect not installed")
-        bearer = helpers.read_token_from_config(state.CONFIG_PATH)
-        self.assertTrue(bearer, "no access token after E2E login prereq")
+        ok_tok = helpers.refresh_e2e_gateway_tokens_for_long_suite(
+            state.CONFIG_PATH, timeout=60
+        )
+        self.assertTrue(ok_tok, "fresh gateway tokens before long TUI chat (full suite)")
         token = f"e2e_hist_token_{int(time.time())}"
         with harness.TuiPtySession(
             state.CONFIG_PATH,
             timeout=90,
-            env_extra={"CYNORK_TOKEN": bearer},
         ) as session:
             self._wait_ready(session)
             session.send_keys([token, "enter"])
@@ -197,14 +198,15 @@ class TestTuiComposerEditor(unittest.TestCase):
         """After Ctrl+Up recalls older line, Ctrl+Down moves forward to newer history entry."""
         if not harness.pty_available():
             self.skipTest("pexpect not installed")
-        bearer = helpers.read_token_from_config(state.CONFIG_PATH)
-        self.assertTrue(bearer, "no access token after E2E login prereq")
+        ok_tok = helpers.refresh_e2e_gateway_tokens_for_long_suite(
+            state.CONFIG_PATH, timeout=60
+        )
+        self.assertTrue(ok_tok, "fresh gateway tokens before long TUI chat (full suite)")
         first = f"e2e_hist_a_{int(time.time())}"
         second = f"e2e_hist_b_{int(time.time())}"
         with harness.TuiPtySession(
             state.CONFIG_PATH,
             timeout=120,
-            env_extra={"CYNORK_TOKEN": bearer},
         ) as session:
             self._wait_ready(session)
             session.send_keys([first, "enter"])

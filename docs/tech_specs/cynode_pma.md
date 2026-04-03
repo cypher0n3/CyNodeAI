@@ -70,7 +70,7 @@ Behavioral responsibilities remain defined by:
 ## Purpose and Trust Boundary
 
 `cynode-pma` is an orchestrator-owned agent runtime hosted as a **worker-managed service container**.
-The orchestrator provisions **one PMA instance per session binding** (distinct `service_id` per instance on the worker); see [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding).
+The orchestrator provisions **one PMA pool slot assignment per session binding** (distinct `pma-pool-*` `service_id` per binding on the worker) and maintains **idle warm slots** per [CYNAI.ORCHES.PmaWarmPool](orchestrator_bootstrap.md#spec-cynai-orches-pmawarmpool); see [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding).
 **Project Analyst** work remains distinct: `project_analyst` mode is for **task-scoped** verification and analysis, not a substitute for a dedicated Project Manager instance per interactive or orchestrator-initiated session.
 It is not a per-task sandbox container and it is not a worker agent.
 It MUST NOT execute arbitrary code locally.

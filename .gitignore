@@ -48,6 +48,7 @@ worker_node/inference-proxy-dev
 *.ico
 *.jpeg
 *.jpg
+*.jwt
 *.log
 *.odp
 *.odt
@@ -77,3 +78,6 @@ coverage.*
 .markdownlint-cli2.jsonc
 .env*
 !.env.example
+
+# NATS dev JWT bundle is generated to XDG cache (just gen-nats-dev-jwt / setup-dev)
+orchestrator/nats-dev-jwt/

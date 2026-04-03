@@ -3,9 +3,11 @@
 import json
 import os
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlparse, urlunparse
 
 from scripts.test_scripts import config
 
@@ -184,6 +186,27 @@ def _ollama_ensure_model(runtime, model_name: str) -> bool:
     return False
 
 
+def ollama_base_url_for_e2e_smoke() -> str:
+    """Return a base URL for HTTP chat checks from the E2E driver process (host).
+
+    Mirrors scripts/e2e_stack_env.sh: rewrites container-only hostnames to loopback so
+    smoke succeeds when Ollama is published as localhost:11434.
+    """
+    raw = (os.environ.get("OLLAMA_BASE_URL") or "").strip()
+    if not raw:
+        raw = "http://127.0.0.1:11434"
+    try:
+        parsed = urlparse(raw)
+    except ValueError:
+        return raw.rstrip("/") or "http://127.0.0.1:11434"
+    host = (parsed.hostname or "").lower()
+    if host in ("host.containers.internal", "host.docker.internal"):
+        port = parsed.port or 11434
+        scheme = parsed.scheme or "http"
+        return urlunparse((scheme, f"127.0.0.1:{port}", "", "", "", "")).rstrip("/")
+    return raw.rstrip("/") or "http://127.0.0.1:11434"
+
+
 def _ollama_chat_one_request(ollama_url, payload):
     """Send one chat request; return True if response has non-empty content."""
     try:
@@ -204,7 +227,8 @@ def _ollama_chat_one_request(ollama_url, payload):
 
 
 def run_ollama_inference_smoke():
-    """Run inference smoke: ensure Ollama at OLLAMA_BASE_URL responds to a chat request.
+    """Run inference smoke: ensure Ollama responds to a chat request at the effective base URL.
+    Resolves OLLAMA_BASE_URL via ollama_base_url_for_e2e_smoke (host vs container DNS).
     Skip if E2E_SKIP_INFERENCE_SMOKE set. Optional: if a container named OLLAMA_CONTAINER_NAME
     is running, wait for it and pull OLLAMA_E2E_MODEL (and OLLAMA_CAPABLE_MODEL when enabled)
     there; then try chat. Pass/fail is based only on whether the chat request succeeds, not on
@@ -212,7 +236,7 @@ def run_ollama_inference_smoke():
     """
     if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
         return True
-    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    ollama_url = ollama_base_url_for_e2e_smoke()
     payload = json.dumps({
         "model": config.OLLAMA_E2E_MODEL,
         "messages": [{"role": "user", "content": "Say one word: hello"}],
@@ -239,4 +263,9 @@ def run_ollama_inference_smoke():
                 _ollama_wait_container_ready(ollama_rt)
                 _ollama_ensure_model(ollama_rt, config.OLLAMA_E2E_MODEL)
         time.sleep(5)
+    print(
+        "[e2e] ollama inference smoke failed after retries; "
+        f"effective_base_url={ollama_url!r} (from OLLAMA_BASE_URL)",
+        file=sys.stderr,
+    )
     return False

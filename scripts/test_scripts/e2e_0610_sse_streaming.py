@@ -72,7 +72,7 @@ class TestSSEStreaming(unittest.TestCase):
     """E2E: SSE streaming via /v1/chat/completions and /v1/responses with stream=true."""
 
     tags = ["suite_orchestrator", "full_demo", "inference", "pma_inference", "streaming"]
-    prereqs = ["gateway", "config", "auth", "ollama"]
+    prereqs = ["gateway", "config", "auth", "ollama", "pma_chat"]
 
     def setUp(self):
         ok, detail = helpers.prepare_e2e_cynork_auth()

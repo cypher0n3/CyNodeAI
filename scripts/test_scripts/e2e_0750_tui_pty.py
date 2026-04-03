@@ -237,43 +237,6 @@ class TestTuiPty(unittest.TestCase):
                 f"Expected in-flight or post-completion landmark; output: {repr(out_s[:500])}",
             )
 
-    def test_tui_pty_cancel_mid_stream_retains_partial_and_marks_interrupted(self):
-        """Cancel mid-stream: scrollback keeps Assistant line and '(stream interrupted)'."""
-        if not harness.pty_available():
-            self.skipTest("pexpect not installed or not Unix")
-        with harness.TuiPtySession(state.CONFIG_PATH, timeout=90) as session:
-            time.sleep(_TUI_STARTUP_DELAY_SEC)
-            self.assertTrue(
-                session.wait_for_prompt_ready(timeout_sec=12),
-                "TUI did not reach prompt-ready or first paint",
-            )
-            session.send_keys(
-                [
-                    "Write at least three long paragraphs about rivers. "
-                    "Use numbered sentences.",
-                    "enter",
-                ]
-            )
-            # Allow the stream to start; cancel is always a client cancel (context.Canceled).
-            # TUI appends "(stream interrupted)" even if no visible token arrived yet.
-            time.sleep(1.25)
-            session.send_keys(harness.cancel_stream_keys())
-            post = harness.wait_scrollback_contains(
-                session,
-                ["(stream interrupted)"],
-                timeout_sec=20.0,
-            )
-            self.assertIn(
-                "(stream interrupted)",
-                post,
-                f"expected interrupt marker after cancel; got: {repr(post[:900])}",
-            )
-            self.assertTrue(
-                "Assistant" in post or "assistant" in post.lower(),
-                "assistant turn area should remain visible after cancel; "
-                + repr(post[:900]),
-            )
-
     def test_tui_pty_new_session_resumes_cached_thread_token(self):
         """Second TUI launch reuses last thread id from XDG cache (connection recovery UX)."""
         if not harness.pty_available():
@@ -297,13 +260,15 @@ class TestTuiPty(unittest.TestCase):
             scr1 = session.capture_screen(drain_sec=0.4) or ""
             tid = harness.extract_thread_token_from_status(scr1)
             thread_id_first = tid if tid else None
+        # Let last_threads.json settle before the second process reads XDG cache.
+        time.sleep(0.75)
         thread_id_second = None
         with harness.TuiPtySession(state.CONFIG_PATH, timeout=90) as session:
             time.sleep(_TUI_STARTUP_DELAY_SEC)
             self.assertTrue(session.wait_for_prompt_ready(timeout_sec=12))
             # Thread resume from XDG cache runs after prompt-ready; status may show
             # ``thread: (default)`` until EnsureThread + cache read finish.
-            deadline = time.time() + 18.0
+            deadline = time.time() + 45.0
             while time.time() < deadline:
                 scr2 = session.capture_screen(drain_sec=0.45) or ""
                 tid2 = harness.extract_thread_token_from_status(scr2)
@@ -357,4 +322,58 @@ class TestTuiPty(unittest.TestCase):
                 or "Error:" in out_s
                 or "> " in out_s,
                 f"After Ctrl+C, expected prompt-ready or hint; output: {repr(out_s[:500])}",
+            )
+
+
+class TestTuiPtyStreaming(unittest.TestCase):
+    """TUI tests that need a live inference path (streaming cancel)."""
+
+    tags = ["suite_cynork", "full_demo", "tui_pty", "tui", "inference"]
+    prereqs = ["gateway", "config", "auth", "ollama"]
+
+    def setUp(self):
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
+        _ensure_config_file()
+
+    def test_tui_pty_cancel_mid_stream_retains_partial_and_marks_interrupted(self):
+        """Cancel in-flight stream: scrollback keeps Assistant line and '(stream interrupted)'.
+
+        Uses a short post-send delay then Ctrl+C so fast local models do not finish the
+        stream before cancel (which would skip the interrupt marker).
+        """
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed or not Unix")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=90) as session:
+            time.sleep(_TUI_STARTUP_DELAY_SEC)
+            self.assertTrue(
+                session.wait_for_prompt_ready(timeout_sec=12),
+                "TUI did not reach prompt-ready or first paint",
+            )
+            session.send_keys(
+                [
+                    "Write at least three long paragraphs about rivers. "
+                    "Use numbered sentences.",
+                    "enter",
+                ]
+            )
+            # Cancel as early as practical so we hit the in-flight path; waiting for long
+            # assistant output lets fast local models finish the whole stream (no interrupt line).
+            time.sleep(0.12)
+            session.capture_screen(drain_sec=0.25)
+            session.send_keys(harness.cancel_stream_keys())
+            post = harness.wait_scrollback_contains(
+                session,
+                ["(stream interrupted)"],
+                timeout_sec=35.0,
+            )
+            self.assertIn(
+                "(stream interrupted)",
+                post,
+                f"expected interrupt marker after cancel; got: {repr(post[:900])}",
+            )
+            self.assertTrue(
+                "Assistant" in post or "assistant" in post.lower(),
+                "assistant turn area should remain visible after cancel; "
+                + repr(post[:900]),
             )

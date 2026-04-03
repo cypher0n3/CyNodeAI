@@ -316,6 +316,7 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 					state.mu.Lock()
 					state.getConfigCalled = true
 					withManaged := state.mockConfigWithManagedServices
+					mockSvcs := append([]nodepayloads.ConfigManagedService(nil), state.mockManagedServicesFromSteps...)
 					infVariant := state.mockInferenceBackendVariant
 					infImage := state.mockInferenceBackendImage
 					state.mu.Unlock()
@@ -333,11 +334,13 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 						InferenceBackend: infBackend,
 					}
 					if withManaged {
-						payload.ManagedServices = &nodepayloads.ConfigManagedServices{
-							Services: []nodepayloads.ConfigManagedService{
-								{ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest"},
-							},
+						svcs := mockSvcs
+						if len(svcs) == 0 {
+							svcs = []nodepayloads.ConfigManagedService{
+								{ServiceID: "pma-pool-0", ServiceType: "pma", Image: "pma:latest"},
+							}
 						}
+						payload.ManagedServices = &nodepayloads.ConfigManagedServices{Services: svcs}
 					}
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)
@@ -365,6 +368,9 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 	sc.Step(`^the mock returns node config with managed_services containing service "([^"]*)" of type "([^"]*)"$`, func(ctx context.Context, serviceID, serviceType string) error {
 		state.mu.Lock()
 		state.mockConfigWithManagedServices = true
+		state.mockManagedServicesFromSteps = []nodepayloads.ConfigManagedService{
+			{ServiceID: serviceID, ServiceType: serviceType, Image: "pma:latest"},
+		}
 		state.mu.Unlock()
 		return nil
 	})
@@ -640,15 +646,24 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 		if st.nodeManagerErr != nil {
 			return fmt.Errorf("node manager failed: %w", st.nodeManagerErr)
 		}
-		found := false
-		for i := range svcs {
-			if strings.TrimSpace(svcs[i].ServiceID) == "pma-main" && strings.TrimSpace(svcs[i].ServiceType) == "pma" {
-				found = true
-				break
-			}
+		st.mu.Lock()
+		want := append([]nodepayloads.ConfigManagedService(nil), st.mockManagedServicesFromSteps...)
+		st.mu.Unlock()
+		if len(want) == 0 {
+			want = []nodepayloads.ConfigManagedService{{ServiceID: "pma-pool-0", ServiceType: "pma"}}
 		}
-		if !found {
-			return fmt.Errorf("expected started services to include pma-main (pma), got %+v", svcs)
+		for _, w := range want {
+			found := false
+			for i := range svcs {
+				if strings.TrimSpace(svcs[i].ServiceID) == strings.TrimSpace(w.ServiceID) &&
+					strings.TrimSpace(svcs[i].ServiceType) == strings.TrimSpace(w.ServiceType) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("expected started services to include %q (%q), got %+v", w.ServiceID, w.ServiceType, svcs)
+			}
 		}
 		return nil
 	})

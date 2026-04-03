@@ -42,12 +42,12 @@ func TestResolvePMAEndpoint_FromManagedServicesStatus(t *testing.T) {
 	node := &models.Node{
 		NodeBase: models.NodeBase{
 			NodeSlug: "node-01",
-			Status:   models.NodeStatusActive,
 		},
 		ID:        nodeID,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
+	testutil.ApplyDispatchableWorkerFields(&node.NodeBase, "", "")
 	db.AddNode(node)
 	report := makeCapabilityReportWithPMAReady("node-01")
 	raw, err := json.Marshal(report)
@@ -68,15 +68,16 @@ func TestResolvePMAEndpoint_FromManagedServicesStatus(t *testing.T) {
 func TestResolvePMAEndpoint_RequiresReadyService(t *testing.T) {
 	db := testutil.NewMockDB()
 	nodeID := uuid.New()
-	db.AddNode(&models.Node{
+	n2 := &models.Node{
 		NodeBase: models.NodeBase{
 			NodeSlug: "node-02",
-			Status:   models.NodeStatusActive,
 		},
 		ID:        nodeID,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
-	})
+	}
+	testutil.ApplyDispatchableWorkerFields(&n2.NodeBase, "", "")
+	db.AddNode(n2)
 	report := nodepayloads.CapabilityReport{
 		Version:    1,
 		ReportedAt: time.Now().UTC().Format(time.RFC3339),
@@ -102,15 +103,16 @@ func TestResolvePMAEndpoint_PicksMostRecentReadyAt(t *testing.T) {
 	now := time.Now().UTC()
 	addNodeWithReady := func(slug, endpoint string, readyAt time.Time) {
 		nodeID := uuid.New()
-		db.AddNode(&models.Node{
+		nn := &models.Node{
 			NodeBase: models.NodeBase{
 				NodeSlug: slug,
-				Status:   models.NodeStatusActive,
 			},
 			ID:        nodeID,
 			CreatedAt: now,
 			UpdatedAt: now,
-		})
+		}
+		testutil.ApplyDispatchableWorkerFields(&nn.NodeBase, "", "")
+		db.AddNode(nn)
 		report := nodepayloads.CapabilityReport{
 			Version:    1,
 			ReportedAt: now.Format(time.RFC3339),
@@ -144,16 +146,16 @@ func TestResolvePMAEndpointCandidate_UsesNodeWorkerBearerToken(t *testing.T) {
 	db := testutil.NewMockDB()
 	nodeID := uuid.New()
 	workerToken := "rotated-worker-token"
-	db.AddNode(&models.Node{
+	nt := &models.Node{
 		NodeBase: models.NodeBase{
-			NodeSlug:             "node-token",
-			Status:               models.NodeStatusActive,
-			WorkerAPIBearerToken: &workerToken,
+			NodeSlug: "node-token",
 		},
 		ID:        nodeID,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
-	})
+	}
+	testutil.ApplyDispatchableWorkerFields(&nt.NodeBase, "", workerToken)
+	db.AddNode(nt)
 	report := makeCapabilityReportWithPMAReady("node-token")
 	raw, err := json.Marshal(report)
 	if err != nil {

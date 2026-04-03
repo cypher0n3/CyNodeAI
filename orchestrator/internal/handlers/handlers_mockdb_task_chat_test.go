@@ -713,15 +713,16 @@ func mockDBWithPMAEndpoint(t *testing.T, pmaURL string) *testutil.MockDB {
 	t.Helper()
 	db := testutil.NewMockDB()
 	nodeID := uuid.New()
-	db.AddNode(&models.Node{
+	nn := &models.Node{
 		NodeBase: models.NodeBase{
 			NodeSlug: "node-pma",
-			Status:   models.NodeStatusActive,
 		},
 		ID:        nodeID,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
-	})
+	}
+	testutil.ApplyDispatchableWorkerFields(&nn.NodeBase, "", "")
+	db.AddNode(nn)
 	report := nodepayloads.CapabilityReport{
 		Version:    1,
 		ReportedAt: time.Now().UTC().Format(time.RFC3339),

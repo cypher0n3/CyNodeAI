@@ -79,7 +79,17 @@ func TeardownAllActivePMABindingsForUser(ctx context.Context, db database.Store,
 	return nil
 }
 
-// TouchPMABindingActivity updates last activity for active bindings (PMA chat / gateway use).
+// TouchPMABindingActivity updates last activity only for the latest active binding for this user
+// (same selection as PMA chat routing). Touching every binding prevented idle teardown of stale
+// per-session PMA rows while the user kept chatting on a newer session.
 func TouchPMABindingActivity(ctx context.Context, db database.SessionBindingStore, userID uuid.UUID) error {
-	return db.TouchActiveSessionBindingsForUser(ctx, userID, time.Now().UTC())
+	bindings, err := db.ListActiveBindingsForUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	b := pickLatestSessionBinding(bindings)
+	if b == nil {
+		return nil
+	}
+	return db.TouchSessionBindingByKey(ctx, b.BindingKey, time.Now().UTC())
 }

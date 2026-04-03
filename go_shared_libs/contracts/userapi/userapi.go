@@ -3,7 +3,11 @@
 // See docs/tech_specs/user_api_gateway.md and REQ-CLIENT-0004 (CLI/Web Console parity).
 package userapi
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/natsconfig"
+)
 
 // API-facing task/job status constants (returned in REST responses; used by CLI/Web Console).
 // Canonical spelling is American "canceled".
@@ -36,6 +40,11 @@ type LoginResponse struct {
 	RefreshToken string `json:"refresh_token"`
 	TokenType    string `json:"token_type"`
 	ExpiresIn    int    `json:"expires_in"`
+	// InteractiveSessionID is the refresh-session UUID for PMA session binding and NATS lifecycle subjects.
+	InteractiveSessionID string `json:"interactive_session_id,omitempty"`
+	// SessionBindingKey is the stable binding key for lineage (user + session + no thread) for NATS payloads.
+	SessionBindingKey string                        `json:"session_binding_key,omitempty"`
+	Nats              *natsconfig.ClientCredentials `json:"nats,omitempty"`
 }
 
 // RefreshRequest is the body for POST /v1/auth/refresh.

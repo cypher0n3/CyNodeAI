@@ -34,8 +34,21 @@ def _find_docs_root() -> Path:
 
 
 def _collect_md_files(docs_root: Path) -> list[Path]:
-    """Return all .md files under docs_root."""
-    return sorted(docs_root.rglob("*.md"))
+    """Return all .md files under docs_root.
+
+    Skips archived plans under docs/dev_docs/old (historical links are not maintained).
+    """
+    out: list[Path] = []
+    for p in sorted(docs_root.rglob("*.md")):
+        try:
+            rel = p.relative_to(docs_root)
+        except ValueError:
+            continue
+        parts = rel.parts
+        if len(parts) >= 2 and parts[0] == "dev_docs" and parts[1] == "old":
+            continue
+        out.append(p)
+    return out
 
 
 # Match markdown link: [text](url). Captures url (may include fragment).

@@ -173,6 +173,7 @@ type embedRunner interface {
 	Ready(ctx context.Context) (bool, string)
 }
 
+//nolint:gocritic // embedProxyConfig is passed by value as a snapshot of mux wiring
 func buildMuxesFromEmbedConfig(
 	runner embedRunner,
 	bearerToken, workspaceRoot string,
@@ -205,7 +206,7 @@ func buildMuxesFromEmbedConfig(
 	return publicMux, internalMux
 }
 
-func managedServiceProxyHTTPHandler(bearerToken string, embedStateDir string, socketByService map[string]string, logger *slog.Logger) http.HandlerFunc {
+func managedServiceProxyHTTPHandler(bearerToken, embedStateDir string, socketByService map[string]string, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -294,7 +295,7 @@ func doManagedProxyUpstreamStream(ctx context.Context, proxyReq *managedProxyReq
 	return 0, nil
 }
 
-func validateManagedProxyRequest(r *http.Request, bearerToken string, embedStateDir string, socketByService map[string]string, logger *slog.Logger) (req *managedProxyRequest, body []byte, socketPath string, errCode int, err error) {
+func validateManagedProxyRequest(r *http.Request, bearerToken, embedStateDir string, socketByService map[string]string, logger *slog.Logger) (req *managedProxyRequest, body []byte, socketPath string, errCode int, err error) {
 	if bearerToken != "" && !embedBearerOK(r.Header.Get("Authorization"), bearerToken) {
 		return nil, nil, "", http.StatusUnauthorized, fmt.Errorf("unauthorized")
 	}

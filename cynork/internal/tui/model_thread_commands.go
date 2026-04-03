@@ -9,6 +9,8 @@ import (
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 )
 
+const threadSubcommandNew = "new"
+
 // handleThreadCommand handles /thread new, list, switch, rename. Returns a tea.Cmd for async ops, or nil.
 func (m *Model) handleThreadCommand(line string) tea.Cmd {
 	if m.Session == nil {
@@ -25,7 +27,7 @@ func (m *Model) handleThreadCommand(line string) tea.Cmd {
 		sub = strings.ToLower(parts[0])
 	}
 	switch sub {
-	case "new":
+	case threadSubcommandNew:
 		return m.threadCommandNew()
 	case "list":
 		return m.threadListCmd()

@@ -122,6 +122,8 @@ func clearEmbedInferenceRuntime() {
 
 // EnsureManagedPMAInferenceProxy starts the per-service Ollama UDS proxy for a PMA service_id if not already running.
 // Call before starting a new PMA container when the orchestrator adds session-bound instances after node-manager boot.
+//
+//nolint:contextcheck // shared embed inference ctx or call ctx; TODO only when both unset for standalone goroutine
 func EnsureManagedPMAInferenceProxy(ctx context.Context, stateDir, serviceID string, logger *slog.Logger) {
 	serviceID = strings.TrimSpace(serviceID)
 	if serviceID == "" {
@@ -151,9 +153,9 @@ func EnsureManagedPMAInferenceProxy(ctx context.Context, stateDir, serviceID str
 	embedInferenceRuntimeMu.Unlock()
 	if pctx == nil {
 		pctx = ctx
-		if pctx == nil {
-			pctx = context.Background()
-		}
+	}
+	if pctx == nil {
+		pctx = context.TODO()
 	}
 	if wg != nil {
 		wg.Add(1)

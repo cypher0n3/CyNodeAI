@@ -12,8 +12,8 @@ import (
 )
 
 // DevResetPMASessionState tears down every active session binding (PMA teardown_pending + config bump)
-// and invalidates all refresh sessions. After this, desired managed services are only the default
-// pma-main row (no per-session pma-sb-* until someone logs in again).
+// and invalidates all refresh sessions. After this, desired managed PMA is warm-pool idle slots only
+// until a new interactive session triggers greedy assignment (pma-pool-*).
 func DevResetPMASessionState(ctx context.Context, db database.Store, logger *slog.Logger) error {
 	bindings, err := db.ListAllActiveSessionBindings(ctx)
 	if err != nil {

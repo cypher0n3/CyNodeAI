@@ -123,6 +123,7 @@ type SessionBindingStore interface {
 	ListActiveBindingsForUser(ctx context.Context, userID uuid.UUID) ([]*models.SessionBinding, error)
 	ListAllActiveSessionBindings(ctx context.Context) ([]*models.SessionBinding, error)
 	TouchActiveSessionBindingsForUser(ctx context.Context, userID uuid.UUID, at time.Time) error
+	TouchSessionBindingByKey(ctx context.Context, bindingKey string, at time.Time) error
 }
 
 // SkillStore covers user and system skills.

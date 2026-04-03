@@ -17,8 +17,26 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/natsjwt"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 )
+
+type authGatewaySpy struct {
+	attached []struct {
+		Tenant, SessionID, UserID, BindingKey string
+	}
+}
+
+func (s *authGatewaySpy) PublishAttached(_ context.Context, tenantID, sessionID, userID, bindingKey string) error {
+	s.attached = append(s.attached, struct {
+		Tenant, SessionID, UserID, BindingKey string
+	}{tenantID, sessionID, userID, bindingKey})
+	return nil
+}
+
+func (s *authGatewaySpy) PublishDetached(context.Context, string, string, string, string, string) error {
+	return nil
+}
 
 func newMockRefreshSession(userID uuid.UUID, tokenHash []byte, expiresAt time.Time) *models.RefreshSession {
 	now := time.Now().UTC()
@@ -57,7 +75,7 @@ func TestAuthHandler_LoginSessionCreationError(t *testing.T) {
 	rateLimiter := auth.NewRateLimiter(100, time.Minute)
 	logger := newTestLogger()
 
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
+	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, nil, "", "", logger)
 
 	user := &models.User{
 		UserBase: models.UserBase{
@@ -103,7 +121,7 @@ func TestAuthHandler_LoginSuccess(t *testing.T) {
 	rateLimiter := auth.NewRateLimiter(100, time.Minute)
 	logger := newTestLogger()
 
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
+	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, nil, "", "", logger)
 
 	// Create user and password
 	user := &models.User{
@@ -156,13 +174,59 @@ func TestAuthHandler_LoginSuccess(t *testing.T) {
 	}
 }
 
+func TestAuthHandler_completeLogin_gatewayPublishAttached(t *testing.T) {
+	t.Cleanup(ResetGreedyPMAIssueForTest)
+	spy := &authGatewaySpy{}
+	mockDB := testutil.NewMockDB()
+	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	handler := NewAuthHandler(mockDB, jwtMgr, auth.NewRateLimiter(100, time.Minute), nil, "", "", newTestLogger())
+	handler.gatewayPub = spy
+
+	user := &models.User{
+		UserBase:  models.UserBase{Handle: "gwpubuser", IsActive: true},
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddUser(user)
+	hash, _ := auth.HashPassword("secret123456789", nil)
+	mockDB.AddPasswordCredential(&models.PasswordCredential{
+		PasswordCredentialBase: models.PasswordCredentialBase{
+			UserID:       user.ID,
+			PasswordHash: hash,
+			HashAlg:      "argon2id",
+		},
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	})
+
+	rec := httptest.NewRecorder()
+	handler.completeLogin(rec, context.Background(), user, "127.0.0.1", "agent")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("completeLogin: %d %s", rec.Code, rec.Body.String())
+	}
+	var resp userapi.LoginResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(spy.attached) != 1 {
+		t.Fatalf("attached calls: got %d want 1", len(spy.attached))
+	}
+	a := spy.attached[0]
+	if a.Tenant != natsjwt.DefaultTenantID || a.SessionID != resp.InteractiveSessionID || a.UserID != user.ID.String() ||
+		a.BindingKey != resp.SessionBindingKey {
+		t.Fatalf("PublishAttached: %+v vs resp session %q binding %q", a, resp.InteractiveSessionID, resp.SessionBindingKey)
+	}
+}
+
 func TestAuthHandler_LoginUserNotFound(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	rateLimiter := auth.NewRateLimiter(100, time.Minute)
 	logger := newTestLogger()
 
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
+	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, nil, "", "", logger)
 
 	body := userapi.LoginRequest{Handle: "nonexistent", Password: "anypassword"}
 	jsonBody, _ := json.Marshal(body)
@@ -182,7 +246,7 @@ func TestAuthHandler_LoginInvalidPassword(t *testing.T) {
 	rateLimiter := auth.NewRateLimiter(100, time.Minute)
 	logger := newTestLogger()
 
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
+	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, nil, "", "", logger)
 
 	user := &models.User{
 		UserBase: models.UserBase{
@@ -268,7 +332,7 @@ func TestAuthHandler_LoginUnauthorizedCases(t *testing.T) {
 					UpdatedAt: now,
 				})
 			}
-			handler := NewAuthHandler(mockDB, auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour), auth.NewRateLimiter(100, time.Minute), newTestLogger())
+			handler := NewAuthHandler(mockDB, auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour), auth.NewRateLimiter(100, time.Minute), nil, "", "", newTestLogger())
 			req, rec := recordedRequestJSON("POST", "/v1/auth/login", userapi.LoginRequest{Handle: tt.loginHandle, Password: tt.loginPassword})
 			handler.Login(rec, req)
 			assertStatusCode(t, rec, tt.wantStatus)
@@ -283,7 +347,7 @@ func TestAuthHandler_LoginDBError(t *testing.T) {
 	rateLimiter := auth.NewRateLimiter(100, time.Minute)
 	logger := newTestLogger()
 
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
+	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, nil, "", "", logger)
 
 	body := userapi.LoginRequest{Handle: "testuser", Password: "testpassword"}
 	jsonBody, _ := json.Marshal(body)
@@ -303,7 +367,7 @@ func TestAuthHandler_RefreshSuccess(t *testing.T) {
 	rateLimiter := auth.NewRateLimiter(100, time.Minute)
 	logger := newTestLogger()
 
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
+	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, nil, "", "", logger)
 
 	user := &models.User{
 		UserBase: models.UserBase{
@@ -346,7 +410,7 @@ func TestAuthHandler_RefreshSuccess(t *testing.T) {
 func TestAuthHandler_RefreshInvalidUserIDInToken(t *testing.T) {
 	secret := "test-secret-key-1234567890123456"
 	jwtMgr := auth.NewJWTManager(secret, 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewAuthHandler(testutil.NewMockDB(), jwtMgr, auth.NewRateLimiter(100, time.Minute), newTestLogger())
+	handler := NewAuthHandler(testutil.NewMockDB(), jwtMgr, auth.NewRateLimiter(100, time.Minute), nil, "", "", newTestLogger())
 	now := time.Now()
 	claims := &auth.Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -377,7 +441,7 @@ func TestAuthHandler_RefreshInactiveUser(t *testing.T) {
 	rateLimiter := auth.NewRateLimiter(100, time.Minute)
 	logger := newTestLogger()
 
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
+	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, nil, "", "", logger)
 
 	user := &models.User{
 		UserBase: models.UserBase{
@@ -414,7 +478,7 @@ func TestAuthHandler_RefreshSessionNotFound(t *testing.T) {
 	rateLimiter := auth.NewRateLimiter(100, time.Minute)
 	logger := newTestLogger()
 
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
+	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, nil, "", "", logger)
 
 	user := &models.User{
 		UserBase: models.UserBase{
@@ -449,7 +513,7 @@ func TestAuthHandler_LogoutWithRefreshToken(t *testing.T) {
 	rateLimiter := auth.NewRateLimiter(100, time.Minute)
 	logger := newTestLogger()
 
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
+	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, nil, "", "", logger)
 
 	user := &models.User{
 		UserBase: models.UserBase{
@@ -570,7 +634,7 @@ func (m *invalidateSessionErrorStore) InvalidateRefreshSession(_ context.Context
 func refreshWithStore(t *testing.T, base *testutil.MockDB, store database.Store, expectedCode int) {
 	t.Helper()
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewAuthHandler(store, jwtMgr, auth.NewRateLimiter(100, time.Minute), newTestLogger())
+	handler := NewAuthHandler(store, jwtMgr, auth.NewRateLimiter(100, time.Minute), nil, "", "", newTestLogger())
 	user := &models.User{
 		UserBase:  models.UserBase{Handle: "u", IsActive: true},
 		ID:        uuid.New(),
@@ -612,7 +676,7 @@ func TestAuthHandler_Refresh_GetActiveRefreshSessionError(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	mockDB.ForceError = errors.New("db error")
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewAuthHandler(mockDB, jwtMgr, auth.NewRateLimiter(100, time.Minute), newTestLogger())
+	handler := NewAuthHandler(mockDB, jwtMgr, auth.NewRateLimiter(100, time.Minute), nil, "", "", newTestLogger())
 
 	refreshToken, _, _ := jwtMgr.GenerateRefreshToken(uuid.New())
 
@@ -627,7 +691,7 @@ func TestAuthHandler_Refresh_GetActiveRefreshSessionError(t *testing.T) {
 func TestAuthHandler_Refresh_CreateSessionFails(t *testing.T) {
 	mockDB := &sessionErrorMockDB{MockDB: testutil.NewMockDB(), failOnCreateSession: true}
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewAuthHandler(mockDB, jwtMgr, auth.NewRateLimiter(100, time.Minute), newTestLogger())
+	handler := NewAuthHandler(mockDB, jwtMgr, auth.NewRateLimiter(100, time.Minute), nil, "", "", newTestLogger())
 
 	user := &models.User{
 		UserBase:  models.UserBase{Handle: "u", IsActive: true},

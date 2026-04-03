@@ -210,7 +210,7 @@ See job dispatch and node selection in [`docs/tech_specs/worker_node.md`](worker
 
 ## Project Manager Agent
 
-The Project Manager Agent (PMA) is an agent runtime that continuously drives work to completion for a **session binding**; the orchestrator provisions **one `cynode-pma` managed service instance per session binding** (see [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)).
+The Project Manager Agent (PMA) is an agent runtime that continuously drives work to completion for a **session binding**; the orchestrator assigns **one `pma-pool-*` managed service slot per session binding** from a **warm pool** (see [CYNAI.ORCHES.PmaWarmPool](orchestrator_bootstrap.md#spec-cynai-orches-pmawarmpool) and [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)).
 In this system, each PMA instance is a **worker-managed service container** and the product is always required to support PMA; disabling PMA is not supported.
 
 - Reads tasks and their acceptance criteria from the database.
@@ -361,7 +361,9 @@ This section defines how the orchestrator manages and tracks worker-managed long
 
 - Spec ID: `CYNAI.ORCHES.PmaGreedyProvisioningOnLogin` <a id="spec-cynai-orches-pmagreedyprovisioningonlogin"></a>
 
-When a user **authenticates** through the User API Gateway and obtains an interactive session, the orchestrator MUST **greedily** provision PMA for that user's **session binding** (per [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)): start or ensure the corresponding managed service instance, push node configuration, and issue PMA MCP credentials with invocation class **user_gateway_session** per [CYNAI.MCPGAT.PmaInvocationClass](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmainvocationclass).
+When a user **authenticates** through the User API Gateway and obtains an interactive session, the orchestrator MUST **greedily** assign a **warm pool** slot and bind PMA for that user's **session binding**
+(per [CYNAI.ORCHES.PmaWarmPool](orchestrator_bootstrap.md#spec-cynai-orches-pmawarmpool) and [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)):
+ensure the corresponding `pma-pool-*` row carries session env, push node configuration, and issue PMA MCP credentials with invocation class **user_gateway_session** per [CYNAI.MCPGAT.PmaInvocationClass](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmainvocationclass).
 
 Normative scope
 
@@ -371,18 +373,19 @@ Normative scope
 #### Greedy PMA Provisioning on User Login Requirements Traces
 
 - [REQ-ORCHES-0190](../requirements/orches.md#req-orches-0190)
+- [REQ-ORCHES-0192](../requirements/orches.md#req-orches-0192)
 - [REQ-USRGWY-0161](../requirements/usrgwy.md#req-usrgwy-0161)
 
 ### Stale PMA Lifecycle and Teardown
 
 - Spec ID: `CYNAI.ORCHES.StalePmaTeardown` <a id="spec-cynai-orches-stalepmateardown"></a>
 
-The orchestrator provisions **one PMA instance per session binding**; it MUST also **reclaim** resources when a binding is no longer valid.
+The orchestrator assigns **one warm-pool slot per session binding**; it MUST also **reclaim** assignments when a binding is no longer valid and restore **idle** pool capacity per [CYNAI.ORCHES.PmaWarmPool](orchestrator_bootstrap.md#spec-cynai-orches-pmawarmpool).
 
 Normative behavior
 
 - The orchestrator MUST identify **stale** PMA instances using policy that includes at least: **session ended**, **user logout**, **idle timeout**, **credential expiry** or **rotation supersession** with no active replacement for that binding, and **orphaned** instances when clients disconnect per product rules.
-- The orchestrator MUST update **desired state** so workers **stop** removed PMA managed services (remove `service_id` from `managed_services.services[]` or set an explicit stopped/removed directive per worker contract) and MUST **invalidate** associated PMA MCP credentials at the gateway.
+- The orchestrator MUST update **desired state** so workers **reconcile** pool slots: **clear session env** on released slots (idle warm container), **shrink** the pool when the slot-count formula decreases, and **stop** containers for indices no longer in desired state; it MUST **invalidate** associated PMA MCP credentials at the gateway.
 - The orchestrator SHOULD run reconciliation on a **periodic** schedule and on relevant **session lifecycle** events so teardown is timely.
 - When NATS is deployed, the orchestrator subscribes to session activity subjects ([CYNAI.ORCHES.NatsSessionActivityConsumer](nats_messaging.md#spec-cynai-orches-natssessionactivityconsumer)) for event-driven idle detection; the periodic scanner remains as a safety net.
 

@@ -110,3 +110,13 @@ func (db *DB) TouchActiveSessionBindingsForUser(ctx context.Context, userID uuid
 			"updated_at":       at,
 		}).Error, "touch session binding activity")
 }
+
+// TouchSessionBindingByKey sets last_activity_at for the active binding with the given binding_key.
+func (db *DB) TouchSessionBindingByKey(ctx context.Context, bindingKey string, at time.Time) error {
+	return wrapErr(db.db.WithContext(ctx).Model(&SessionBindingRecord{}).
+		Where("binding_key = ? AND state = ?", bindingKey, models.SessionBindingStateActive).
+		Updates(map[string]interface{}{
+			"last_activity_at": at,
+			"updated_at":       at,
+		}).Error, "touch session binding by key")
+}

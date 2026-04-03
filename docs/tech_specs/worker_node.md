@@ -144,7 +144,7 @@ Normative behavior:
 PMA as managed service (normative):
 
 - PMA is a core system feature and is always required.
-- The orchestrator MUST instruct a worker to run **one or more** PMA managed service instances (one **per session binding** per [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)); each instance has a distinct `service_id`.
+- The orchestrator MUST instruct a worker to run **one or more** PMA managed service instances (`pma-pool-*` warm pool per [CYNAI.ORCHES.PmaWarmPool](orchestrator_bootstrap.md#spec-cynai-orches-pmawarmpool), slots assigned per session binding per [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)); each entry has a distinct `service_id`.
 - The worker MUST start, supervise, and keep each configured PMA instance running per desired state (see [REQ-WORKER-0176](../requirements/worker.md#req-worker-0176)).
 
 ### NATS Connection and Chat Bridge for Managed Services
@@ -159,7 +159,7 @@ See [`docs/tech_specs/nats_messaging.md`](nats_messaging.md) for the full subjec
 
 - During [registration and bootstrap](#spec-cynai-worker-registrationandbootstrap), the worker authenticates with the orchestrator via HTTP(S) using the pre-shared key (existing flow).
 - The orchestrator returns a `nats` configuration block in the bootstrap payload containing the server URL, a node-scoped NATS JWT, JWT expiry, and optional TLS/subject overrides.
-  See [`node_bootstrap_payload_v1`](worker_node_payloads.md#spec-cynai-worker-payload-bootstrap-v1) for the full schema and [NATS Authentication and Credentials](nats_messaging.md#nats-authentication-and-credentials) for the credential model.
+  See [`node_bootstrap_payload_v1`](worker_node_payloads.md#spec-cynai-worker-payload-bootstrap-v1) for the full schema and [NATS Authentication and Credentials](nats_messaging.md#spec-cynai-usrgwy-natsclientcredentials) for the credential model.
 - The worker connects to NATS using the provided URL and JWT.
   The `NATS_URL` environment variable is accepted as a fallback only when the bootstrap payload omits the `nats` block (e.g. legacy orchestrator).
 - After NATS connection, the worker uses NATS for chat bridging, config notifications, and session activity relay.

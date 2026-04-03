@@ -124,7 +124,7 @@ func TestNodeHandler_BootstrapResponse(t *testing.T) {
 	handler := &NodeHandler{orchestratorPublicURL: testOrchestratorURL}
 	expiresAt := time.Now().Add(24 * time.Hour)
 
-	resp := handler.buildBootstrapResponse(testOrchestratorURL, "test-node-jwt", expiresAt)
+	resp := handler.buildBootstrapResponse(testOrchestratorURL, "test-node-jwt", expiresAt, uuid.MustParse("00000000-0000-4000-8000-000000000003"))
 
 	if resp.Version != 1 {
 		t.Errorf("expected version 1, got %d", resp.Version)

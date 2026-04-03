@@ -405,13 +405,14 @@ class TestTuiSlashCommands(unittest.TestCase):
         """After a send, /copy last reports last-assistant copy feedback in scrollback."""
         if not harness.pty_available():
             self.skipTest("pexpect not installed")
-        bearer = helpers.read_token_from_config(state.CONFIG_PATH)
-        self.assertTrue(bearer, "no access token after E2E login prereq")
+        ok_tok = helpers.refresh_e2e_gateway_tokens_for_long_suite(
+            state.CONFIG_PATH, timeout=60
+        )
+        self.assertTrue(ok_tok, "fresh gateway tokens before long TUI chat (full suite)")
         token = f"e2e_copy_last_{int(time.time())}"
         with harness.TuiPtySession(
             state.CONFIG_PATH,
             timeout=90,
-            env_extra={"CYNORK_TOKEN": bearer},
         ) as session:
             self._wait_ready(session)
             session.send_keys([token, "enter"])
@@ -538,6 +539,10 @@ class TestTuiSlashCommands(unittest.TestCase):
         """After a chat turn completes, /show-thinking still toggles (local transcript path)."""
         if not harness.pty_available():
             self.skipTest("pexpect not installed")
+        ok_tok = helpers.refresh_e2e_gateway_tokens_for_long_suite(
+            state.CONFIG_PATH, timeout=60
+        )
+        self.assertTrue(ok_tok, "fresh gateway tokens before long TUI chat (full suite)")
         with harness.TuiPtySession(state.CONFIG_PATH, timeout=90) as session:
             self._wait_ready(session)
             session.send_keys(["Reply with exactly: OK", "enter"])

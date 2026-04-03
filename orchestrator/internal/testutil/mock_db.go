@@ -420,6 +420,24 @@ func (m *MockDB) ListNodes(_ context.Context, limit, offset int) ([]*models.Node
 	})
 }
 
+// ApplyDispatchableWorkerFields sets config ack and worker API fields so ListDispatchableNodes includes the node.
+// Pass empty targetURL or bearerToken for defaults used in handler tests.
+func ApplyDispatchableWorkerFields(nb *models.NodeBase, targetURL, bearerToken string) {
+	ack := "applied"
+	url := targetURL
+	if url == "" {
+		url = "http://worker.test:8080"
+	}
+	tok := bearerToken
+	if tok == "" {
+		tok = "bearer-default"
+	}
+	nb.Status = models.NodeStatusActive
+	nb.ConfigAckStatus = &ack
+	nb.WorkerAPITargetURL = &url
+	nb.WorkerAPIBearerToken = &tok
+}
+
 func isDispatchableNode(n *models.Node) bool {
 	if n.Status != models.NodeStatusActive {
 		return false

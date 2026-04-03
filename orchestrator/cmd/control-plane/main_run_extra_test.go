@@ -586,6 +586,17 @@ func TestRunTelemetryPullLoop_ListFails(t *testing.T) {
 	<-done
 }
 
+func TestSleepOrDone(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if sleepOrDone(ctx, time.Millisecond) {
+		t.Fatal("canceled ctx")
+	}
+	if !sleepOrDone(context.Background(), 5*time.Millisecond) {
+		t.Fatal("expected true after sleep")
+	}
+}
+
 func TestRunTelemetryPullLoop_OneTick(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

@@ -115,6 +115,51 @@ func TestTouchPMABindingActivity_UpdatesLastActivityAt(t *testing.T) {
 	}
 }
 
+func TestTouchPMABindingActivity_OnlyTouchesLatestBinding(t *testing.T) {
+	ctx := context.Background()
+	db := testutil.NewMockDB()
+	uid := uuid.New()
+	oldTime := time.Now().UTC().Add(-3 * time.Hour)
+	newerTime := time.Now().UTC().Add(-time.Minute)
+
+	rsOld := uuid.New()
+	lineageOld := models.SessionBindingLineage{UserID: uid, SessionID: rsOld, ThreadID: nil}
+	keyOld := models.DeriveSessionBindingKey(lineageOld)
+	if _, err := db.UpsertSessionBinding(ctx, lineageOld, models.PMAServiceIDForBindingKey(keyOld), models.SessionBindingStateActive); err != nil {
+		t.Fatal(err)
+	}
+	db.SessionBindingsByKey[keyOld].UpdatedAt = oldTime
+	db.SessionBindingsByKey[keyOld].LastActivityAt = &oldTime
+
+	rsNew := uuid.New()
+	lineageNew := models.SessionBindingLineage{UserID: uid, SessionID: rsNew, ThreadID: nil}
+	keyNew := models.DeriveSessionBindingKey(lineageNew)
+	if _, err := db.UpsertSessionBinding(ctx, lineageNew, models.PMAServiceIDForBindingKey(keyNew), models.SessionBindingStateActive); err != nil {
+		t.Fatal(err)
+	}
+	db.SessionBindingsByKey[keyNew].UpdatedAt = newerTime
+	staleLA := oldTime.Add(-time.Hour)
+	db.SessionBindingsByKey[keyNew].LastActivityAt = &staleLA
+
+	if err := TouchPMABindingActivity(ctx, db, uid); err != nil {
+		t.Fatal(err)
+	}
+	bOld, err := db.GetSessionBindingByKey(ctx, keyOld)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bOld.LastActivityAt == nil || !bOld.LastActivityAt.Equal(oldTime) {
+		t.Fatalf("stale binding last_activity should stay %v, got %v", oldTime, bOld.LastActivityAt)
+	}
+	bNew, err := db.GetSessionBindingByKey(ctx, keyNew)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bNew.LastActivityAt == nil || !bNew.LastActivityAt.After(staleLA) {
+		t.Fatalf("latest binding should be touched; last=%v", bNew.LastActivityAt)
+	}
+}
+
 func TestScanPMABindingsOnce_IdleTimeout(t *testing.T) {
 	t.Cleanup(ResetPMATeardownForTest)
 	ctx := context.Background()

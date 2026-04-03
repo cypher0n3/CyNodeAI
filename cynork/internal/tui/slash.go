@@ -382,6 +382,7 @@ func (m *Model) authLogout() slashResultMsg {
 	if m.AuthProvider == nil {
 		return slashResultMsg{lines: []string{"auth logout: not available (no config in this session)"}}
 	}
+	m.stopSessionNats("logout")
 	m.AuthProvider.SetTokens("", "")
 	if err := m.AuthProvider.Save(); err != nil {
 		return slashResultMsg{lines: []string{"Error: " + err.Error()}}
@@ -414,6 +415,7 @@ func (m *Model) authRefresh() slashResultMsg {
 	}
 	m.AuthProvider.SetTokens(resp.AccessToken, newRefresh)
 	m.Session.SetToken(resp.AccessToken)
+	m.restartSessionNatsFromLogin(m.Session.Client, resp)
 	return slashResultMsg{lines: []string{"Token refreshed successfully."}}
 }
 

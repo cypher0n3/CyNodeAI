@@ -191,6 +191,8 @@ _start_impl *ARGS:
     export OLLAMA_IMAGE="${OLLAMA_IMAGE:-ollama/ollama:rocm}"
     export INFERENCE_PROXY_IMAGE="${INFERENCE_PROXY_IMAGE:-cynodeai-inference-proxy:dev}"
     export OLLAMA_UPSTREAM_URL="${OLLAMA_UPSTREAM_URL:-http://${host_alias}:11434}"
+    export NATS_URL="${NATS_URL:-nats://127.0.0.1:4222}"
+    export NATS_MONITOR_PORT="${NATS_MONITOR_PORT:-8222}"
     export WORKER_API_STATE_DIR="${WORKER_API_STATE_DIR:-{{ node_state_dir }}}"
     export CYNODE_SECURE_STORE_MASTER_KEY_B64="${CYNODE_SECURE_STORE_MASTER_KEY_B64:-}"
     LOGS_DIR="${CYNODEAI_LOGS_DIR:-${TMPDIR:-/tmp}/cynodeai-setup-dev-logs}"
@@ -206,6 +208,22 @@ _start_impl *ARGS:
     }
     mkdir -p "$(dirname {{ node_manager_pid_file }})" "$WORKER_API_STATE_DIR" "$LOGS_DIR"
     [ ! -f "{{ node_manager_bin }}" ] && echo "[ERROR] node-manager not found" && exit 1
+    _xdg_cache="${XDG_CACHE_HOME:-$HOME/.cache}"
+    export NATS_DEV_JWT_DIR="${NATS_DEV_JWT_DIR:-$_xdg_cache/cynodeai/nats-dev-jwt}"
+    mkdir -p "$NATS_DEV_JWT_DIR"
+    echo "[INFO] Writing NATS dev JWT bundle to $NATS_DEV_JWT_DIR"
+    if ! (cd "$root" && go run ./orchestrator/cmd/gen-nats-dev-jwt -dir "$NATS_DEV_JWT_DIR"); then
+      echo "[ERROR] gen-nats-dev-jwt failed"
+      exit 1
+    fi
+    _nats_seeds_json="${NATS_DEV_SEEDS_FILE:-$_xdg_cache/cynodeai/nats-dev-seeds.json}"
+    if [ -f "$_nats_seeds_json" ]; then
+      NATS_ACCOUNT_SEED="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["cynode_account_seed"])' "$_nats_seeds_json")"
+      NATS_ACCOUNT_SIGNING_SEED="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["cynode_signing_seed"])' "$_nats_seeds_json")"
+      export NATS_ACCOUNT_SEED NATS_ACCOUNT_SIGNING_SEED
+    else
+      echo "[WARN] NATS dev seeds missing at $_nats_seeds_json; compose may issue JWTs NATS rejects" >&2
+    fi
     profiles=""
     $ollama_in_stack && profiles="--profile ollama"
     if ! (cd "$root" && $rt compose -f orchestrator/docker-compose.yml $profiles up -d); then
@@ -213,6 +231,21 @@ _start_impl *ARGS:
       run_setup_dev_diagnostics compose_up
       exit 1
     fi
+    nats_mp="${NATS_MONITOR_PORT:-8222}"
+    nats_ok=0
+    for _i in $(seq 1 60); do
+      if curl -sf "http://127.0.0.1:${nats_mp}/healthz" >/dev/null 2>&1; then
+        nats_ok=1
+        break
+      fi
+      sleep 1
+    done
+    if [ "$nats_ok" != "1" ]; then
+      echo "[ERROR] NATS not healthy after 60s (http://127.0.0.1:${nats_mp}/healthz)."
+      run_setup_dev_diagnostics nats_healthz
+      exit 1
+    fi
+    echo "[INFO] NATS monitoring healthy (port ${nats_mp})."
     (pgrep -f cynodeai-wnm || true) | xargs -r kill -TERM 2>/dev/null || true
     (pgrep -f worker-api-dev || true) | xargs -r kill -TERM 2>/dev/null || true
     sleep 2
@@ -246,8 +279,9 @@ stop:
     #!/usr/bin/env bash
     set -e
     root="$(cd "{{ root_dir }}" && pwd)"
-    # Invalidate refresh sessions + teardown per-session PMA bindings in Postgres while control-plane is up,
-    # so the next `setup-dev start` only runs cynodeai-managed-pma-main (no pma-sb-* until login). Opt out: SETUP_DEV_SKIP_SESSION_RESET=1
+    # Invalidate refresh sessions + clear PMA session bindings in Postgres while control-plane is up,
+    # so the next `setup-dev start` has no session-bound PMA; worker may still reconcile to idle pma-pool-*.
+    # Opt out: SETUP_DEV_SKIP_SESSION_RESET=1
     if [ "${SETUP_DEV_SKIP_SESSION_RESET:-0}" != "1" ]; then
       bash "$root/scripts/setup_dev_reset_session_state.sh" "$root" || true
     fi
@@ -462,6 +496,22 @@ e2e *ARGS:
         (cd "$root" && just setup-dev component node-manager restart) || {
           echo "[WARN] node-manager restart failed; E2E may use a stale binary." >&2
         }
+      fi
+    fi
+    skip_ready_wait=0
+    for a in "$@"; do [ "$a" = "--list" ] && skip_ready_wait=1; done
+    if [ "$skip_ready_wait" != "1" ]; then
+      orch_port="${ORCHESTRATOR_PORT:-12080}"
+      echo "[INFO] E2E: waiting for user-gateway GET /readyz HTTP 200 (worker PMA snapshot, up to 180s)..."
+      ready_ok=0
+      for _i in $(seq 1 180); do
+        code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${orch_port}/readyz" 2>/dev/null || printf '%s' "")
+        if [ "$code" = "200" ]; then ready_ok=1; break; fi
+        sleep 1
+      done
+      if [ "$ready_ok" != "1" ]; then
+        echo "[ERROR] user-gateway /readyz not 200 after 180s (last HTTP ${code:-unknown}). Fix stack before E2E." >&2
+        exit 1
       fi
     fi
     py="python3"

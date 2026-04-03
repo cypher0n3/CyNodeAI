@@ -117,6 +117,9 @@ func openGatewayStore(ctx context.Context, logger *slog.Logger, cfg *config.Orch
 // When DATABASE_URL is set (or testStore/testDatabaseOpen is set in tests), tool-call handler writes audit records.
 func run(ctx context.Context, logger *slog.Logger) error {
 	cfg := config.LoadOrchestratorConfig()
+	if err := config.ResolveNATSSeeds(cfg); err != nil {
+		return err
+	}
 	if err := config.ValidateSecrets(cfg); err != nil {
 		return err
 	}
