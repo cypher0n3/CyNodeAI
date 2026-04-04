@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 	"github.com/google/uuid"
@@ -144,6 +147,7 @@ func TestNodeBootstrapResponseJSON(t *testing.T) {
 				WorkerRegistrationURL string `json:"worker_registration_url"`
 				NodeReportURL         string `json:"node_report_url"`
 				NodeConfigURL         string `json:"node_config_url"`
+				NodeSelfUnregisterURL string `json:"node_self_unregister_url"`
 			} `json:"endpoints"`
 		} `json:"orchestrator"`
 		Auth struct {
@@ -166,6 +170,9 @@ func TestNodeBootstrapResponseJSON(t *testing.T) {
 	}
 	if parsed.Orchestrator.Endpoints.NodeReportURL != testOrchestratorURL+"/v1/nodes/capability" {
 		t.Errorf("expected node_report_url, got %s", parsed.Orchestrator.Endpoints.NodeReportURL)
+	}
+	if parsed.Orchestrator.Endpoints.NodeSelfUnregisterURL != testOrchestratorURL+"/v1/nodes/self" {
+		t.Errorf("expected node_self_unregister_url, got %s", parsed.Orchestrator.Endpoints.NodeSelfUnregisterURL)
 	}
 }
 
@@ -190,6 +197,68 @@ func TestBuildBootstrapResponse(t *testing.T) {
 	}
 	if resp.Orchestrator.Endpoints.NodeConfigURL != baseURL+"/v1/nodes/config" {
 		t.Errorf("expected node_config_url, got %s", resp.Orchestrator.Endpoints.NodeConfigURL)
+	}
+	if resp.Orchestrator.Endpoints.NodeSelfUnregisterURL != baseURL+"/v1/nodes/self" {
+		t.Errorf("expected node_self_unregister_url, got %s", resp.Orchestrator.Endpoints.NodeSelfUnregisterURL)
+	}
+}
+
+func TestUnregisterSelf_NoNodeID(t *testing.T) {
+	h := NewNodeHandler(testutil.NewMockDB(), nil, "psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/v1/nodes/self", nil)
+	rec := httptest.NewRecorder()
+	h.UnregisterSelf(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("want 401, got %d", rec.Code)
+	}
+}
+
+func TestUnregisterSelf_Success(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	nodeID := uuid.New()
+	mockDB.Nodes[nodeID] = &models.Node{
+		NodeBase: models.NodeBase{NodeSlug: "gone-node"},
+		ID:       nodeID,
+	}
+	mockDB.NodesBySlug["gone-node"] = mockDB.Nodes[nodeID]
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
+	ctx := SetNodeContext(context.Background(), nodeID, "gone-node")
+	req := httptest.NewRequest(http.MethodDelete, "/v1/nodes/self", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	h.UnregisterSelf(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("want 204, got %d", rec.Code)
+	}
+	if _, err := mockDB.GetNodeByID(context.Background(), nodeID); !errors.Is(err, database.ErrNotFound) {
+		t.Errorf("node should be removed: %v", err)
+	}
+}
+
+func TestUnregisterSelf_NotFound(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
+	ctx := SetNodeContext(context.Background(), uuid.New(), "missing")
+	req := httptest.NewRequest(http.MethodDelete, "/v1/nodes/self", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	h.UnregisterSelf(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("want 404, got %d", rec.Code)
+	}
+}
+
+func TestUnregisterSelf_DBError(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	nodeID := uuid.New()
+	mockDB.Nodes[nodeID] = &models.Node{NodeBase: models.NodeBase{NodeSlug: "x"}, ID: nodeID}
+	mockDB.NodesBySlug["x"] = mockDB.Nodes[nodeID]
+	mockDB.HardDeleteNodeErr = errors.New("db boom")
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
+	ctx := SetNodeContext(context.Background(), nodeID, "x")
+	req := httptest.NewRequest(http.MethodDelete, "/v1/nodes/self", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	h.UnregisterSelf(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("want 500, got %d", rec.Code)
 	}
 }
 
@@ -646,6 +715,42 @@ func TestSelectPMAHostNodeSlug_PrefersLabeledNode(t *testing.T) {
 	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
 	if got := h.selectPMAHostNodeSlug(t.Context(), "fallback-node"); got != "node-b" {
 		t.Errorf("selectPMAHostNodeSlug() = %q, want node-b", got)
+	}
+}
+
+func TestSelectPMAHostNodeSlug_PrefersDispatchableWhenMultipleActive(t *testing.T) {
+	_ = os.Unsetenv("PMA_HOST_NODE_SLUG")
+	_ = os.Unsetenv("PMA_PREFER_HOST_LABEL")
+	defer func() {
+		_ = os.Unsetenv("PMA_PREFER_HOST_LABEL")
+	}()
+	mockDB := testutil.NewMockDB()
+	orphan := &models.Node{
+		NodeBase: models.NodeBase{
+			NodeSlug: "aaa-orphan",
+			Status:   models.NodeStatusActive,
+		},
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	realWorker := &models.Node{
+		NodeBase: models.NodeBase{
+			NodeSlug: "zzz-worker",
+			Status:   models.NodeStatusActive,
+		},
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	testutil.ApplyDispatchableWorkerFields(&realWorker.NodeBase, "http://worker:12090", "tok")
+	now := time.Now().UTC()
+	realWorker.LastSeenAt = &now
+	mockDB.AddNode(orphan)
+	mockDB.AddNode(realWorker)
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil, "", "", nil)
+	if got := h.selectPMAHostNodeSlug(t.Context(), "fallback"); got != "zzz-worker" {
+		t.Errorf("selectPMAHostNodeSlug() = %q, want zzz-worker (dispatchable must beat alphabetical active-only)", got)
 	}
 }
 

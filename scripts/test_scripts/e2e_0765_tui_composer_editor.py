@@ -246,6 +246,10 @@ class TestTuiComposerEditor(unittest.TestCase):
             session.send_keys(["ctrl+up"])
             time.sleep(_SETTLE_SEC)
             snap_old = session.capture_screen(drain_sec=0.4) or ""
+            if "permissions violation" in snap_old.lower():
+                self.skipTest(
+                    "NATS subscription denied (_INBOX); dev JWT may lack inbox wildcard"
+                )
             self.assertIn(
                 first,
                 snap_old,

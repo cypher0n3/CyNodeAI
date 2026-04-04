@@ -36,6 +36,7 @@
   - [Task Create Handoff](#task-create-handoff)
 - [Sandbox Image Registry](#sandbox-image-registry)
 - [Node Bootstrap and Configuration](#node-bootstrap-and-configuration)
+  - [`Orchestrator.NodeSelfUnregister` Operation](#orchestratornodeselfunregister-operation)
   - [Job Dispatch](#job-dispatch)
 - [Postgres Schema](#postgres-schema)
   - [Task vs Job (Terminology)](#task-vs-job-terminology)
@@ -690,6 +691,21 @@ Config delivery
 - POST on that URL accepts `node_config_ack_v1` and persists the acknowledgement; see [Nodes Table](#spec-cynai-schema-nodestable) columns `config_ack_at`, `config_ack_status`, `config_ack_error`.
 - Endpoint paths are not mandated here; the bootstrap payload carries the concrete URLs so nodes do not rely on hard-coded paths.
 
+### `Orchestrator.NodeSelfUnregister` Operation
+
+- Spec ID: `CYNAI.ORCHES.Operation.NodeSelfUnregister` <a id="spec-cynai-orches-operation-nodeselfunregister"></a>
+
+- The bootstrap payload includes `orchestrator.endpoints.node_self_unregister_url` (absolute URL).
+- The node calls that URL with **HTTP DELETE** and header `Authorization: Bearer <node_jwt>` (same node JWT as for config and capability).
+- **Response:** `204 No Content` when the node row for the JWT subject is removed.
+- **Errors:** `401` when the request is not authenticated as a node; `404` when the node id from the JWT no longer exists (for example race with a prior delete).
+- **Persistence:** removal is a **hard delete** of the `nodes` row (not a soft delete), because `node_slug` is unique and must become available for a new registration.
+  Dependent rows follow PostgreSQL FK rules (for example `node_capabilities` ON DELETE CASCADE, `jobs.node_id` ON DELETE SET NULL per schema).
+
+#### `Orchestrator.NodeSelfUnregister` Operation Traces To
+
+- [REQ-ORCHES-0193](../requirements/orches.md#req-orches-0193)
+
 ### Job Dispatch
 
 - For the initial single-node implementation, the orchestrator dispatches jobs to the Worker API via direct HTTP.
@@ -899,6 +915,7 @@ For bundle jobs, the payload embeds full per-task context (`context.task_context
 - `id` (uuid, pk)
 - `node_slug` (text, unique)
   - stable identifier used in registration and scheduling (e.g. from node startup YAML)
+  - after [node self-unregister](#spec-cynai-orches-operation-nodeselfunregister), the row is removed and the slug may be inserted again
 - `status` (text)
   - examples: registered, active, inactive, drained
 - `config_version` (text, nullable)

@@ -17,6 +17,7 @@ func TestBootstrapResponseJSON(t *testing.T) {
 				WorkerRegistrationURL: "https://orchestrator.example.com/v1/nodes/register",
 				NodeReportURL:         "https://orchestrator.example.com/v1/nodes/capability",
 				NodeConfigURL:         "https://orchestrator.example.com/v1/nodes/config",
+				NodeSelfUnregisterURL: "https://orchestrator.example.com/v1/nodes/self",
 			},
 		},
 		Auth: BootstrapAuth{
@@ -49,6 +50,9 @@ func TestBootstrapResponseJSON(t *testing.T) {
 	}
 	if parsed.Orchestrator.Endpoints.NodeConfigURL != "https://orchestrator.example.com/v1/nodes/config" {
 		t.Errorf("expected node_config_url, got %s", parsed.Orchestrator.Endpoints.NodeConfigURL)
+	}
+	if parsed.Orchestrator.Endpoints.NodeSelfUnregisterURL != "https://orchestrator.example.com/v1/nodes/self" {
+		t.Errorf("expected node_self_unregister_url, got %s", parsed.Orchestrator.Endpoints.NodeSelfUnregisterURL)
 	}
 }
 

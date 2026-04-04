@@ -182,7 +182,7 @@ _start_impl *ARGS:
     $rt rm -f cynodeai-control-plane cynodeai-user-gateway cynodeai-cynode-pma 2>/dev/null || true
     export ORCHESTRATOR_URL="http://localhost:${CONTROL_PLANE_PORT}"
     export NODE_REGISTRATION_PSK="${NODE_PSK:-dev-node-psk-secret}"
-    export NODE_SLUG="${NODE_SLUG:-dev-node-1}"
+    export NODE_SLUG="${NODE_SLUG:-test-e2e-node}"
     export NODE_NAME="${NODE_NAME:-Development Node}"
     export NODE_MANAGER_WORKER_API_BIN="$root/worker_node/bin/worker-api-dev"
     export LISTEN_ADDR=":${WORKER_PORT:-12090}"
@@ -265,13 +265,14 @@ _start_impl *ARGS:
       exit 1
     fi
     # E2E uses user-gateway (ORCHESTRATOR_PORT); wait for it so just e2e can run.
+    # Cold start: worker must reconcile PMA pool containers (often 2–4+ minutes after compose up).
     last_readyz=""
-    for _i in $(seq 1 90); do
+    for _i in $(seq 1 240); do
       last_readyz=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${ORCHESTRATOR_PORT:-12080}/readyz" 2>/dev/null || printf '%s' "")
       [ "$last_readyz" = "200" ] && echo "[INFO] User-gateway ready (e2e target)." && exit 0
       sleep 1
     done
-    echo "[ERROR] User-gateway not ready after 90s (port ${ORCHESTRATOR_PORT:-12080}, last GET /readyz HTTP ${last_readyz:-unknown})."
+    echo "[ERROR] User-gateway not ready after 240s (port ${ORCHESTRATOR_PORT:-12080}, last GET /readyz HTTP ${last_readyz:-unknown})."
     run_setup_dev_diagnostics user_gateway_readyz "${last_readyz}"
     exit 1
 
@@ -456,7 +457,7 @@ _start_node:
     esac
     export ORCHESTRATOR_URL="http://localhost:${CONTROL_PLANE_PORT:-12082}"
     export NODE_REGISTRATION_PSK="${NODE_PSK:-dev-node-psk-secret}"
-    export NODE_SLUG="${NODE_SLUG:-dev-node-1}"
+    export NODE_SLUG="${NODE_SLUG:-test-e2e-node}"
     export NODE_NAME="${NODE_NAME:-Development Node}"
     export NODE_MANAGER_WORKER_API_BIN="$root/worker_node/bin/worker-api-dev"
     export LISTEN_ADDR=":${WORKER_PORT:-12090}"
@@ -487,9 +488,11 @@ e2e *ARGS:
     export OLLAMA_UPSTREAM_URL="${OLLAMA_UPSTREAM_URL:-http://host.containers.internal:11434}"
     # shellcheck source=/dev/null
     . "$root/scripts/e2e_stack_env.sh"
-    # Node-manager runs on the host; align with repo so fixes (e.g. managed-service teardown) apply.
+    # Node-manager runs on the host. Default: do not restart here — a restart tears down managed
+    # PMA/pool containers; full E2E needs a warm stack after `setup-dev start`. To force a fresh
+    # binary before tests: E2E_SKIP_NODE_MANAGER_RESTART=0 just e2e
     (cd "$root" && just build-node-manager-dev)
-    if [ "${E2E_SKIP_NODE_MANAGER_RESTART:-0}" != "1" ]; then
+    if [ "${E2E_SKIP_NODE_MANAGER_RESTART:-1}" != "1" ]; then
       wp="${WORKER_PORT:-12090}"
       if curl -sf "http://127.0.0.1:${wp}/healthz" >/dev/null 2>&1; then
         echo "[INFO] E2E: restarting node-manager (fresh cynodeai-wnm-dev)."

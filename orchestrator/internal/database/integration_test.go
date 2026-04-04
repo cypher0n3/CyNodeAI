@@ -101,6 +101,32 @@ func TestIntegration_Node(t *testing.T) {
 	}
 }
 
+func TestIntegration_HardDeleteNode(t *testing.T) {
+	db, ctx := integrationDB(t)
+	slug := "inttest-hdel-" + uuid.New().String()
+	node, err := db.CreateNode(ctx, slug)
+	if err != nil {
+		t.Fatalf("CreateNode: %v", err)
+	}
+	if err := db.HardDeleteNode(ctx, node.ID); err != nil {
+		t.Fatalf("HardDeleteNode: %v", err)
+	}
+	_, err = db.GetNodeBySlug(ctx, slug)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetNodeBySlug after delete: want ErrNotFound, got %v", err)
+	}
+	node2, err := db.CreateNode(ctx, slug)
+	if err != nil {
+		t.Fatalf("CreateNode same slug after delete: %v", err)
+	}
+	if node2.ID == node.ID {
+		t.Error("expected new node id after re-register")
+	}
+	if err := db.HardDeleteNode(ctx, uuid.New()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("HardDeleteNode missing id: want ErrNotFound, got %v", err)
+	}
+}
+
 func TestIntegration_SystemSettings(t *testing.T) {
 	db, ctx := integrationDB(t)
 	key := "inttest.setting." + uuid.New().String()

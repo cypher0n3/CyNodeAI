@@ -178,6 +178,7 @@ type BootstrapEndpoints struct {
 	WorkerRegistrationURL string `json:"worker_registration_url"`
 	NodeReportURL         string `json:"node_report_url"`
 	NodeConfigURL         string `json:"node_config_url"`
+	NodeSelfUnregisterURL string `json:"node_self_unregister_url"`
 }
 
 type BootstrapAuth struct {

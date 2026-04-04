@@ -92,6 +92,9 @@ services:
       DISPATCH_HTTP_TIMEOUT: ${DISPATCH_HTTP_TIMEOUT:-300s}
       PMA_ENABLED: ${PMA_ENABLED:-true}
       PMA_IMAGE: ${PMA_IMAGE:-ghcr.io/cypher0n3/cynode-pma:latest}
+      # Must match setup-dev NODE_SLUG (default test-e2e-node). PMA managed services attach only to
+      # the node identity that polls GET /v1/nodes/config; it must be the same slug as the host worker.
+      PMA_HOST_NODE_SLUG: ${PMA_HOST_NODE_SLUG:-test-e2e-node}
       NATS_URL: ${NATS_URL:-nats://nats:4222}
       # Dial broker on the compose network; login/bootstrap still use NATS_CLIENT_URL (host-reachable).
       NATS_SERVER_URL: ${NATS_SERVER_URL:-nats://nats:4222}

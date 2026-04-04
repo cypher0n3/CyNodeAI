@@ -114,7 +114,7 @@ Gaps (e.g. 0011-0019 between 0010 and 0020) allow inserting new tests without re
 - **e2e_0320_worker_api_managed_service** - Worker API (node-manager) healthz and node:info.
 - **e2e_0330_node_manager_telemetry** - Telemetry logs for source_name=node_manager (node-manager lifecycle).
 - **e2e_0340_uds_inference_routing** - UDS inference proxy routing coverage for worker-managed services and sandbox inference paths.
-- **e2e_0380_control_plane_node_register** - POST `/v1/nodes/register`; sets `state.NODE_JWT`.
+- **e2e_0027_control_plane_node_register** - POST `/v1/nodes/register` (early in suite); sets `state.NODE_JWT`; new slug 201 then re-register 200.
 - **e2e_0390_control_plane_capability** - POST `/v1/nodes/capability` with node JWT.
 - **e2e_0420_task_create** - Task create acceptance coverage for prompt mode plus canonical `--name` and `--attach`; sets `state.TASK_ID`.
 - **e2e_0425_task_planning_state** - `planning_state=draft` on create; workflow start blocked until `task ready`; workflow gate case needs `WORKFLOW_RUNNER_BEARER_TOKEN` (set by `scripts/e2e_stack_env.sh` / compose defaults when using full-demo).
@@ -174,7 +174,7 @@ The **node_register** prereq runs control-plane node registration and sets `stat
 
 - **Atomic tests:** Every test must be runnable in isolation (e.g. `just e2e --single e2e_0430_task_list`).
   Each run is a new process; shared state is empty and no earlier tests have run in that run.
-- **No prior-test dependency:** Tests must not assume that another test (e.g. e2e_0420, e2e_0380, e2e_0710) has already run.
+- **No prior-test dependency:** Tests must not assume that another test (e.g. e2e_0420, e2e_0027, e2e_0710) has already run.
   Required state (e.g. `state.TASK_ID`, `state.NODE_JWT`, `state.SBA_TASK_ID`) must be established by:
   - **Prereqs** declared on the test class (e.g. `task_id`, `node_register`), which the runner runs before the test, or
   - **Helpers in setup** (e.g. `helpers.ensure_e2e_sba_task()` in e2e_0720).

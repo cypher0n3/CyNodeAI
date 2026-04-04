@@ -188,27 +188,16 @@ class TestPMAStandardPathStreaming(unittest.TestCase):
 
     def test_pma_gateway_sse_amendment_payload_shape_when_present(self):
         """When PMA emits overwrite NDJSON, gateway relays cynodeai.amendment with valid scope."""
-        headers = _auth_headers(state.CONFIG_PATH)
-        headers["Content-Type"] = "application/json"
-        headers["Accept"] = "text/event-stream"
-        payload = {
-            "model": "cynodeai.pm",
-            "stream": True,
-            "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
-        }
-        resp = requests.post(
-            f"{self._gateway_url()}/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            stream=True,
-            timeout=_SSE_TIMEOUT_SEC,
+        events, _found_done = helpers.pm_stream_events_with_amendment_baits(
+            state.CONFIG_PATH, timeout_sec=_SSE_TIMEOUT_SEC
         )
-        if resp.status_code != 200:
-            self.skipTest(f"gateway returned {resp.status_code}")
-        events, _ = helpers.parse_sse_stream_typed(resp)
+        helpers.require_amendment_events_or_skip(
+            self,
+            events,
+            "expected cynodeai.amendment after PMA secret-scan baits "
+            f"{helpers.PMA_STREAM_AMENDMENT_USER_BAITS!r}",
+        )
         amendments = [e for e in events if e.get("event") == "cynodeai.amendment"]
-        if not amendments:
-            self.skipTest("no amendment events in this completion (overwrite is path-dependent)")
         for ev in amendments:
             data = helpers.parse_json_safe(ev.get("data") or "{}")
             if not isinstance(data, dict):

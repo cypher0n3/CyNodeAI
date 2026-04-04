@@ -1,5 +1,6 @@
-# E2E: Gateway streaming contract (amendment, heartbeat, cancellation, persistence).
+# E2E: Gateway streaming contract (amendment, cancellation, persistence).
 # Traces: REQ-USRGWY-0149-0156, Task 3 gateway relay.
+# Heartbeat fallback SSE is covered by Go TestEmitDegradedStreamingFallback_Chat_IncludesHeartbeat.
 # Use with just e2e --tags chat. Requires real stack (gateway auth via setUp, PMA).
 
 import json
@@ -22,14 +23,14 @@ def _auth_headers(cfg_path):
 
 
 class TestGatewayStreamingContract(unittest.TestCase):
-    """E2E: Gateway amendment, heartbeat fallback, cancellation, persistence (Task 3).
+    """E2E: Gateway amendment path, cancellation, persistence (Task 3).
 
-    Requires real stack (CONFIG_PATH, auth). Skips when specific events (amendment,
-    heartbeat) are not produced by the live PMA/gateway.
+    Requires real stack (CONFIG_PATH, auth). Amendment coverage uses PMA secret-scan baits
+    (see helpers.PMA_STREAM_AMENDMENT_USER_BAITS).
     """
 
     tags = ["suite_orchestrator", "chat", "gateway", "streaming"]
-    prereqs = ["gateway", "config", "auth", "ollama"]
+    prereqs = ["gateway", "config", "auth", "ollama", "pma_chat"]
 
     def setUp(self):
         ok, detail = helpers.prepare_e2e_cynork_auth()
@@ -59,42 +60,18 @@ class TestGatewayStreamingContract(unittest.TestCase):
 
     def test_stream_amendment_arrives_before_terminal_completion(self):
         """Amendment events MUST arrive before [DONE] when redaction is applied."""
-        resp = self._stream_chat_completions()
-        if resp.status_code != 200:
-            self.skipTest(f"gateway returned {resp.status_code}")
-        events, found_done = helpers.parse_sse_stream_typed(resp)
+        events, found_done = helpers.pm_stream_events_with_amendment_baits(
+            state.CONFIG_PATH, timeout_sec=_SSE_TIMEOUT_SEC
+        )
+        helpers.require_amendment_events_or_skip(
+            self,
+            events,
+            "expected cynodeai.amendment (PMA secret-scan baits); "
+            f"tried {helpers.PMA_STREAM_AMENDMENT_USER_BAITS!r}",
+        )
         self.assertTrue(found_done, "stream must end with [DONE]")
         amendment_events = [e for e in events if e.get("event") == "cynodeai.amendment"]
-        if not amendment_events:
-            self.skipTest("stream did not contain amendment; PMA may not have triggered redaction")
-        self.assertLess(
-            events.index(amendment_events[0]),
-            len(events),
-            "amendment must precede terminal completion",
-        )
-
-    def test_stream_heartbeat_fallback_emits_progress_then_final_visible_text(self):
-        """When upstream cannot stream, gateway SHOULD emit heartbeat then final text."""
-        resp = self._stream_chat_completions()
-        if resp.status_code != 200:
-            self.skipTest(f"gateway returned {resp.status_code}")
-        events, found_done = helpers.parse_sse_stream_typed(resp)
-        self.assertTrue(found_done)
-        heartbeat = [e for e in events if e.get("event") == "cynodeai.heartbeat"]
-        if not heartbeat:
-            self.skipTest("stream did not contain heartbeat; upstream may have streamed normally")
-        content_parts = []
-        for e in events:
-            try:
-                obj = json.loads(e["data"])
-                for c in obj.get("choices", []):
-                    content_parts.append(c.get("delta", {}).get("content", ""))
-            except json.JSONDecodeError:
-                pass
-        self.assertTrue(
-            "".join(content_parts).strip(),
-            "must receive final visible text after heartbeat",
-        )
+        self.assertGreater(len(amendment_events), 0)
 
     def test_client_disconnect_is_treated_as_stream_cancellation(self):
         """Client disconnect MUST cancel the stream and not leave upstream running indefinitely."""
@@ -111,14 +88,15 @@ class TestGatewayStreamingContract(unittest.TestCase):
 
     def test_streamed_structured_parts_are_persisted_redacted_only(self):
         """Persisted assistant turn MUST store only redacted content in structured parts."""
-        resp = self._stream_chat_completions()
-        if resp.status_code != 200:
-            self.skipTest(f"gateway returned {resp.status_code}")
-        events, found_done = helpers.parse_sse_stream_typed(resp)
+        events, found_done = helpers.pm_stream_events_with_amendment_baits(
+            state.CONFIG_PATH, timeout_sec=_SSE_TIMEOUT_SEC
+        )
+        helpers.require_amendment_events_or_skip(
+            self, events, "expected amendment SSE from PMA secret-scan baits"
+        )
         self.assertTrue(found_done)
         amendment_events = [e for e in events if e.get("event") == "cynodeai.amendment"]
-        if not amendment_events:
-            self.skipTest("stream did not contain amendment; cannot assert persistence shape")
+        self.assertGreater(len(amendment_events), 0)
         data = json.loads(amendment_events[0]["data"])
         self.assertIn(
             "redacted", data,

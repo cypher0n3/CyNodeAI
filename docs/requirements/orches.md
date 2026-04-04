@@ -396,3 +396,8 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.ORCHES.PmaWarmPool](../tech_specs/orchestrator_bootstrap.md#spec-cynai-orches-pmawarmpool)
   [CYNAI.ORCHES.PmaInstancePerSessionBinding](../tech_specs/orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)
   <a id="req-orches-0192"></a>
+- **REQ-ORCHES-0193:** The orchestrator MUST allow an **authenticated worker node** to **unregister itself**, removing its registry row so the same **node_slug** MAY be registered again in a subsequent registration request.
+  The control plane MUST expose this operation using the **node JWT** (same class as config and capability endpoints) and MUST include the concrete URL in the bootstrap payload (`node_self_unregister_url` in `node_bootstrap_payload_v1`).
+  [CYNAI.ORCHES.Operation.NodeSelfUnregister](../tech_specs/orchestrator.md#spec-cynai-orches-operation-nodeselfunregister)
+  [CYNAI.WORKER.Payload.BootstrapV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-bootstrap-v1)
+  <a id="req-orches-0193"></a>

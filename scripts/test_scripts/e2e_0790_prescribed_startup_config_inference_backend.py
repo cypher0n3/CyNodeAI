@@ -22,7 +22,9 @@ class TestPrescribedStartupConfigInferenceBackend(unittest.TestCase):
             "capability": {
                 "version": 1,
                 "reported_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "node": {"node_slug": "e2e-prescribed-node"},
+                # Slug must sort after ``test-e2e-node`` when multiple nodes tie-break by slug;
+                # PMA host selection prefers the live worker (last_seen) and ``orchestrator_host`` label.
+                "node": {"node_slug": "z-e2e-prescribed-node"},
                 "platform": {"os": "linux", "arch": "amd64"},
                 "compute": {"cpu_cores": 4, "ram_mb": 8192},
                 "inference": {

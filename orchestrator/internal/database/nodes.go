@@ -205,6 +205,19 @@ func (db *DB) UpdateNodeWorkerAPIConfig(ctx context.Context, nodeID uuid.UUID, t
 		}, "update node worker api config")
 }
 
+// HardDeleteNode permanently deletes the node row (Unscoped), allowing node_slug to be reused.
+// Related rows follow FK rules (e.g. node_capabilities CASCADE, jobs.node_id SET NULL).
+func (db *DB) HardDeleteNode(ctx context.Context, nodeID uuid.UUID) error {
+	res := db.db.WithContext(ctx).Unscoped().Where("id = ?", nodeID).Delete(&NodeRecord{})
+	if res.Error != nil {
+		return wrapErr(res.Error, "hard delete node")
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SetWorkerBearerTokenKey sets the AES key for worker_api_bearer_token at-rest encryption (derived from JWT secret in main).
 func (db *DB) SetWorkerBearerTokenKey(key []byte) {
 	db.workerBearerKey = key

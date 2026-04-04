@@ -82,6 +82,8 @@ type NodeStore interface {
 	UpdateNodeConfigVersion(ctx context.Context, nodeID uuid.UUID, configVersion string) error
 	UpdateNodeConfigAck(ctx context.Context, nodeID uuid.UUID, configVersion, status string, ackAt time.Time, errMsg *string) error
 	UpdateNodeWorkerAPIConfig(ctx context.Context, nodeID uuid.UUID, targetURL, bearerToken string) error
+	// HardDeleteNode removes the node row (hard delete; cascades per schema) so node_slug can be reused.
+	HardDeleteNode(ctx context.Context, nodeID uuid.UUID) error
 }
 
 // PreferenceStore covers user/project/task preference entries (MCP preference.* tools).

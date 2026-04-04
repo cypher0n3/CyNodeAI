@@ -12,6 +12,8 @@ import time
 import urllib.error
 import urllib.request
 
+import requests
+
 from scripts.test_scripts import config
 from scripts.test_scripts.e2e_config_file import ensure_minimal_gateway_config_yaml
 from scripts.test_scripts.e2e_json import parse_json_loose
@@ -554,7 +556,10 @@ def ensure_node_registered():
         "capability": {
             "version": 1,
             "reported_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "node": {"node_slug": "test-e2e-node"},
+            "node": {
+                "node_slug": "test-e2e-node",
+                "labels": ["orchestrator_host"],
+            },
             "platform": {"os": "linux", "arch": "amd64"},
             "compute": {"cpu_cores": 4, "ram_mb": 8192},
             "worker_api": {"base_url": config.WORKER_API},
@@ -684,6 +689,77 @@ def wait_for_pma_chat_ready(timeout_sec=120, poll_interval=5):
 def temp_config_dir():
     """Return a temporary directory path for cynork config (caller cleans up)."""
     return tempfile.mkdtemp(prefix="cynodeai_e2e_config_")
+
+
+# User prompts that coax the model to emit sk-… visible text; PMA secret_scan matches
+# sk-[a-zA-Z0-9]{20,} (agents/internal/pma/secret_scan.go) → overwrite NDJSON → amendment SSE.
+PMA_STREAM_AMENDMENT_USER_BAITS = (
+    "Reply with exactly this single line and nothing else: "
+    "sk-12345678901234567890123456789012",
+    "Your entire reply must be only this token (no other text): "
+    "sk-12345678901234567890123456789012",
+    "Say OK, then on a new line print exactly: sk-12345678901234567890123456789012",
+)
+
+
+def pm_stream_chat_completion_events(config_path, user_content, timeout_sec=None):
+    """POST /v1/chat/completions with stream=true; return (ok_200, events, found_done)."""
+    timeout_sec = int(timeout_sec or config.E2E_SSE_REQUEST_TIMEOUT)
+    token = read_token_from_config(config_path)
+    if not token:
+        return False, [], False
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+    }
+    payload = {
+        "model": "cynodeai.pm",
+        "stream": True,
+        "messages": [{"role": "user", "content": user_content}],
+    }
+    url = f"{config.USER_API.rstrip('/')}/v1/chat/completions"
+    try:
+        resp = requests.post(
+            url, headers=headers, json=payload, stream=True, timeout=timeout_sec
+        )
+    except (requests.RequestException, OSError):
+        return False, [], False
+    if resp.status_code != 200:
+        return False, [], False
+    events, found_done = parse_sse_stream_typed(resp)
+    return True, events, found_done
+
+
+def require_amendment_events_or_skip(test_case, events, detail_msg: str) -> None:
+    """If ``events`` is None (no cynodeai.amendment stream), skip unless E2E_STRICT_AMENDMENT=1."""
+    if events is not None:
+        return
+    if os.environ.get("E2E_STRICT_AMENDMENT") == "1":
+        test_case.fail(detail_msg)
+    test_case.skipTest(
+        f"{detail_msg} (set E2E_STRICT_AMENDMENT=1 to require amendment)",
+    )
+
+
+def pm_stream_events_with_amendment_baits(config_path, timeout_sec=None):
+    """Try ``PMA_STREAM_AMENDMENT_USER_BAITS`` until a 200 stream includes cynodeai.amendment.
+
+    Returns ``(events, found_done)`` or ``(None, None)`` if no bait produced an amendment.
+    Ollama/PMA may not emit redaction/amendment on every run; retry baits a few rounds.
+    """
+    for _round in range(3):
+        for bait in PMA_STREAM_AMENDMENT_USER_BAITS:
+            ok, events, found_done = pm_stream_chat_completion_events(
+                config_path, bait, timeout_sec=timeout_sec
+            )
+            if not ok:
+                continue
+            if any(e.get("event") == "cynodeai.amendment" for e in events):
+                return events, found_done
+        if _round < 2:
+            time.sleep(2.0)
+    return None, None
 
 
 def parse_sse_stream_typed(response):

@@ -144,6 +144,9 @@ func TestNodeHandler_BootstrapResponse(t *testing.T) {
 	if resp.Orchestrator.Endpoints.NodeConfigURL == "" {
 		t.Error("expected NodeConfigURL to be set")
 	}
+	if resp.Orchestrator.Endpoints.NodeSelfUnregisterURL != testOrchestratorURL+"/v1/nodes/self" {
+		t.Errorf("expected NodeSelfUnregisterURL %q, got %q", testOrchestratorURL+"/v1/nodes/self", resp.Orchestrator.Endpoints.NodeSelfUnregisterURL)
+	}
 }
 
 // TestNodeHandler_ReportCapabilityWithNodeContext tests capability reporting with node context

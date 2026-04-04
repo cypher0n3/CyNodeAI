@@ -23,9 +23,10 @@ def _auth_headers(cfg_path):
 
 
 class TestTUIStreamingBehavior(unittest.TestCase):
-    """E2E: TUI in-flight turn, overwrite scopes, heartbeat (Task 5).
+    """E2E: TUI in-flight turn, overwrite scopes (Task 5).
 
     Requires real stack. TUI progressive test runs cynork against live gateway.
+    Heartbeat fallback UI is covered by cynork unit tests and gateway degraded-path tests.
     """
 
     tags = ["suite_cynork", "tui_pty", "tui", "pma_inference", "streaming"]
@@ -101,61 +102,17 @@ class TestTUIStreamingBehavior(unittest.TestCase):
 
     def test_tui_turn_scoped_amendment_replaces_visible_text_without_duplication(self):
         """Per-turn amendment MUST replace visible text without duplication."""
-        headers = _auth_headers(state.CONFIG_PATH)
-        headers["Content-Type"] = "application/json"
-        headers["Accept"] = "text/event-stream"
-        resp = requests.post(
-            f"{self._gateway_url()}/v1/chat/completions",
-            headers=headers,
-            json={
-                "model": "cynodeai.pm",
-                "stream": True,
-                "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
-            },
-            stream=True,
-            timeout=_SSE_TIMEOUT_SEC,
+        events, found_done = helpers.pm_stream_events_with_amendment_baits(
+            state.CONFIG_PATH, timeout_sec=_SSE_TIMEOUT_SEC
         )
-        if resp.status_code != 200:
-            self.skipTest(f"gateway returned {resp.status_code}")
-        events, found_done = helpers.parse_sse_stream_typed(resp)
+        helpers.require_amendment_events_or_skip(
+            self,
+            events,
+            "expected cynodeai.amendment from PMA secret-scan baits",
+        )
         self.assertTrue(found_done)
         amendments = [e for e in events if e.get("event") == "cynodeai.amendment"]
-        if not amendments:
-            self.skipTest("stream did not contain amendment; PMA may not have triggered redaction")
         self.assertGreater(
             len(amendments), 0,
             "stream must include amendment for turn-scoped replace",
-        )
-
-    def test_tui_heartbeat_progress_indicator_disappears_after_final_content(self):
-        """Heartbeat progress indicator MUST disappear after final content."""
-        headers = _auth_headers(state.CONFIG_PATH)
-        headers["Content-Type"] = "application/json"
-        headers["Accept"] = "text/event-stream"
-        resp = requests.post(
-            f"{self._gateway_url()}/v1/chat/completions",
-            headers=headers,
-            json={
-                "model": "cynodeai.pm",
-                "stream": True,
-                "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
-            },
-            stream=True,
-            timeout=_SSE_TIMEOUT_SEC,
-        )
-        if resp.status_code != 200:
-            self.skipTest(f"gateway returned {resp.status_code}")
-        events, found_done = helpers.parse_sse_stream_typed(resp)
-        self.assertTrue(found_done)
-        event_names = [e.get("event") for e in events if e.get("event")]
-        heartbeat_idx = next(
-            (i for i, n in enumerate(event_names) if n == "cynodeai.heartbeat"),
-            -1,
-        )
-        if heartbeat_idx < 0:
-            self.skipTest("stream did not contain heartbeat; upstream may have streamed normally")
-        content_events = [e for e in events if e.get("event") is None and e.get("data")]
-        self.assertGreater(
-            len(content_events), 0,
-            "stream must include content after heartbeat",
         )

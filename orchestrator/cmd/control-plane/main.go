@@ -274,6 +274,7 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	mux.HandleFunc("POST /internal/dev/reset-pma-session-state", handlers.DevResetPMASessionStateHandler(store, cfg.NodeRegistrationPSK, logger))
 
 	mux.HandleFunc("POST /v1/nodes/register", httplimits.LimitBody(maxBodyBytes, nodeHandler.Register))
+	mux.Handle("DELETE /v1/nodes/self", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.UnregisterSelf)))
 	mux.Handle("GET /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.GetConfig)))
 	mux.Handle("POST /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, nodeHandler.ConfigAck))))
 	mux.Handle("POST /v1/nodes/capability", authMiddleware.RequireNodeAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, nodeHandler.ReportCapability))))

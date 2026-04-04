@@ -158,7 +158,7 @@ cmd_start() {
   # Node-manager runs worker-api as subprocess; needs orchestrator URL, PSK, worker port, secure store.
   export ORCHESTRATOR_URL="http://localhost:${CONTROL_PLANE_PORT}"
   export NODE_REGISTRATION_PSK="$NODE_PSK"
-  export NODE_SLUG="${NODE_SLUG:-dev-node-1}"
+  export NODE_SLUG="${NODE_SLUG:-test-e2e-node}"
   export NODE_NAME="${NODE_NAME:-Development Node}"
   export NODE_MANAGER_WORKER_API_BIN="$ROOT/$NODE_MANAGER_WORKER_API_BIN"
   export LISTEN_ADDR=":${WORKER_PORT}"

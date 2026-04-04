@@ -240,6 +240,39 @@ def _prereq_pma_chat(opts):
     return True
 
 
+def _run_early_pma_stack_prereqs_if_needed(suite, opts, succeeded_prereqs, failed_prereqs):
+    """Run gateway→pma_chat once before any test if the suite needs PMA chat.
+
+    Tests are discovered in file order; modules that run before the first
+    ``pma_inference`` file can bump node config and tear down managed PMA/pool
+    containers. Waiting for PMA chat only on the first test that declares
+    ``pma_chat`` is then too late.
+    """
+    required = _collect_suite_prereqs(suite)
+    if e2e_tags.PREREQ_PMA_CHAT not in required:
+        return True
+    if opts.skip_ollama:
+        return True
+    early = (
+        e2e_tags.PREREQ_GATEWAY,
+        e2e_tags.PREREQ_CONFIG,
+        e2e_tags.PREREQ_AUTH,
+        e2e_tags.PREREQ_OLLAMA,
+        e2e_tags.PREREQ_PMA_CHAT,
+    )
+    for name in early:
+        if not _run_single_prereq(name, opts):
+            failed_prereqs.add(name)
+            print(
+                f"Error: early stack prereq {name!r} failed "
+                "(suite requires PMA chat; fix stack or run a narrower --tags subset).",
+                file=sys.stderr,
+            )
+            return False
+        succeeded_prereqs.add(name)
+    return True
+
+
 def _run_single_prereq(name, opts):
     """Run one prereq step. Return True on success, False on failure."""
     if name == e2e_tags.PREREQ_GATEWAY:
@@ -408,6 +441,10 @@ def main():
         pass
     else:
         _ensure_cynork_ready(opts)
+        if not _run_early_pma_stack_prereqs_if_needed(
+            suite, opts, succeeded_prereqs, failed_prereqs
+        ):
+            sys.exit(1)
 
     runnable = _PrereqFilterSuite(suite, failed_prereqs, succeeded_prereqs, opts)
     result = unittest.runner.TextTestRunner(verbosity=2).run(runnable)

@@ -105,6 +105,8 @@ type MockDB struct {
 	UpdateSystemSettingErr error
 	// DeleteSystemSettingErr, when set, makes DeleteSystemSetting return this error.
 	DeleteSystemSettingErr error
+	// HardDeleteNodeErr, when set, makes HardDeleteNode return this error.
+	HardDeleteNodeErr error
 	// ListTasksByUserErr, when set, makes ListTasksByUser return this error.
 	ListTasksByUserErr error
 	// ListAuthorizedProjectsForUserErr, when set, makes ListAuthorizedProjectsForUser return this error.
@@ -978,6 +980,22 @@ func (m *MockDB) UpdateNodeWorkerAPIConfig(_ context.Context, nodeID uuid.UUID, 
 			n.WorkerAPITargetURL = &targetURL
 			n.WorkerAPIBearerToken = &bearerToken
 		})
+		return nil
+	})
+}
+
+// HardDeleteNode permanently removes the node from the mock registry.
+func (m *MockDB) HardDeleteNode(_ context.Context, nodeID uuid.UUID) error {
+	if m.HardDeleteNodeErr != nil {
+		return m.HardDeleteNodeErr
+	}
+	return runWithWLockErr(m, func() error {
+		node, ok := m.Nodes[nodeID]
+		if !ok {
+			return database.ErrNotFound
+		}
+		delete(m.Nodes, nodeID)
+		delete(m.NodesBySlug, node.NodeSlug)
 		return nil
 	})
 }

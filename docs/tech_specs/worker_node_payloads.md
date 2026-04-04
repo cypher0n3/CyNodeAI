@@ -246,6 +246,8 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
     - `worker_registration_url` (string)
     - `node_config_url` (string)
     - `node_report_url` (string)
+    - `node_self_unregister_url` (string)
+      - absolute URL for **DELETE** with the node JWT; removes the node registry row so `node_slug` can be registered again; see [CYNAI.ORCHES.Operation.NodeSelfUnregister](orchestrator.md#spec-cynai-orches-operation-nodeselfunregister)
 - `auth` (object)
   - `node_jwt` (string)
   - `expires_at` (string)

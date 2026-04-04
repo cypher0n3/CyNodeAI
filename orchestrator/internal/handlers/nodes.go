@@ -232,6 +232,7 @@ func (h *NodeHandler) buildBootstrapResponse(baseURL, nodeJWT string, expiresAt 
 				WorkerRegistrationURL: baseURL + "/v1/nodes/register",
 				NodeReportURL:         baseURL + "/v1/nodes/capability",
 				NodeConfigURL:         baseURL + "/v1/nodes/config",
+				NodeSelfUnregisterURL: baseURL + "/v1/nodes/self",
 			},
 		},
 		Auth: nodepayloads.BootstrapAuth{
@@ -253,6 +254,26 @@ func (h *NodeHandler) buildBootstrapResponse(baseURL, nodeJWT string, expiresAt 
 		}
 	}
 	return out
+}
+
+// UnregisterSelf handles DELETE /v1/nodes/self: permanently removes the authenticated node's registry row.
+func (h *NodeHandler) UnregisterSelf(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	nodeID := getNodeIDFromContext(ctx)
+	if nodeID == nil {
+		WriteUnauthorized(w, "Node authentication required")
+		return
+	}
+	if err := h.db.HardDeleteNode(ctx, *nodeID); err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			WriteNotFound(w, "Node not found")
+			return
+		}
+		h.logError("hard delete node", "error", err)
+		WriteInternalError(w, "Failed to unregister node")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // resolveConfigVersion returns the node's config version or a new ULID, persisting when new.
@@ -565,7 +586,27 @@ func selectPMAHostNodeSlug(ctx context.Context, db database.Store, fallbackNodeS
 	if err != nil || len(nodes) == 0 {
 		return fallbackNodeSlug
 	}
-	sort.Slice(nodes, func(i, j int) bool { return nodes[i].NodeSlug < nodes[j].NodeSlug })
+	// When multiple rows are "active", prefer nodes that have completed worker bootstrap
+	// (config ack + worker API). Orphan control-plane registrations without a live worker
+	// stay active but are not dispatchable; they must not win PMA host over the real node
+	// (e.g. extra API registrations sorted before the canonical worker slug).
+	if disp, derr := db.ListDispatchableNodes(ctx); derr == nil && len(disp) > 0 {
+		nodes = disp
+	}
+	sort.Slice(nodes, func(i, j int) bool {
+		ni, nj := nodes[i], nodes[j]
+		var ti, tj time.Time
+		if ni.LastSeenAt != nil {
+			ti = *ni.LastSeenAt
+		}
+		if nj.LastSeenAt != nil {
+			tj = *nj.LastSeenAt
+		}
+		if !ti.Equal(tj) {
+			return ti.After(tj)
+		}
+		return ni.NodeSlug < nj.NodeSlug
+	})
 	preferLabel := strings.TrimSpace(getEnvDefault("PMA_PREFER_HOST_LABEL", "orchestrator_host"))
 	if preferLabel != "" {
 		for _, n := range nodes {
