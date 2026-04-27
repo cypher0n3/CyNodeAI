@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install just
-        uses: extractions/setup-just@v3
+        uses: extractions/setup-just@v4
 
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
@@ -47,7 +47,7 @@ jobs:
             agents/go.sum
 
       - name: Install just
-        uses: extractions/setup-just@v3
+        uses: extractions/setup-just@v4
 
       - name: Lint Go (vet, staticcheck, golangci-lint, fmt)
         run: |
@@ -68,7 +68,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install just
-        uses: extractions/setup-just@v3
+        uses: extractions/setup-just@v4
 
       - name: Create venv and lint Python
         run: |
@@ -92,7 +92,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install just
-        uses: extractions/setup-just@v3
+        uses: extractions/setup-just@v4
 
       - name: Install markdownlint-cli2
         run: npm install -g markdownlint-cli2
@@ -118,7 +118,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install just
-        uses: extractions/setup-just@v3
+        uses: extractions/setup-just@v4
 
       - name: E2E tag and requirements trace checks
         run: |
@@ -137,7 +137,7 @@ jobs:
           node-version: "20"
 
       - name: Install just
-        uses: extractions/setup-just@v3
+        uses: extractions/setup-just@v4
 
       - name: Lint Gherkin
         run: just lint-gherkin
@@ -173,7 +173,7 @@ jobs:
             agents/go.sum
 
       - name: Install just
-        uses: extractions/setup-just@v3
+        uses: extractions/setup-just@v4
 
       - name: Build dev binaries
         run: just build-dev
@@ -196,7 +196,7 @@ jobs:
             agents/go.sum
 
       - name: Install just
-        uses: extractions/setup-just@v3
+        uses: extractions/setup-just@v4
 
       - name: Go vulnerability check
         run: |
@@ -221,7 +221,7 @@ jobs:
             agents/go.sum
 
       - name: Install just
-        uses: extractions/setup-just@v3
+        uses: extractions/setup-just@v4
 
       - name: Go tests with coverage
         run: |
@@ -246,7 +246,7 @@ jobs:
             agents/go.sum
 
       - name: Install just
-        uses: extractions/setup-just@v3
+        uses: extractions/setup-just@v4
 
       - name: BDD (Godog) tests
         run: just test-bdd
