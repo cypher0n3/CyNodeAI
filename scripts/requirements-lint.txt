@@ -2,6 +2,6 @@
 flake8>=6.0
 pylint>=3.0
 radon>=6.0
-xenon>=0.9
+xenon>=0.9.3
 vulture>=2.0
 bandit>=1.7
